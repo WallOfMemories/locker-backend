@@ -74,6 +74,37 @@ function serializeSnap(snap) {
   };
 }
 
+// Snaps only store the author's userId. Liked / Saved lists show other
+// people's Snaps, so look up each author once and attach their username +
+// photo (the browser can't read other users' profiles itself).
+async function withAuthors(snaps) {
+  const userIds = [
+    ...new Set(snaps.map((snap) => snap.userId).filter(Boolean)),
+  ];
+
+  if (userIds.length === 0) return snaps;
+
+  const userDocs = await db.getAll(
+    ...userIds.map((id) => db.collection("users").doc(id))
+  );
+
+  const authors = {};
+
+  userDocs.forEach((doc) => {
+    if (doc.exists) authors[doc.id] = doc.data();
+  });
+
+  return snaps.map((snap) => {
+    const author = authors[snap.userId] || {};
+
+    return {
+      ...snap,
+      username: author.username || "",
+      userPhotoURL: author.photoURL || "",
+    };
+  });
+}
+
 const HIDDEN_RESPONSE = {
   success: false,
   message: "This Snap has been hidden by the moderators.",
@@ -804,7 +835,7 @@ async function getSavedSnaps(req, res) {
 
     return res.status(200).json({
       success: true,
-      snaps: savedSnaps,
+      snaps: (await withAuthors(savedSnaps)).map(serializeSnap),
     });
   } catch (error) {
     console.error(
@@ -846,7 +877,7 @@ async function getLikedSnaps(req, res) {
 
     return res.status(200).json({
       success: true,
-      snaps: likedSnaps,
+      snaps: (await withAuthors(likedSnaps)).map(serializeSnap),
     });
   } catch (error) {
     console.error(
