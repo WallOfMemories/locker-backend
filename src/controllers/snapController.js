@@ -4,6 +4,9 @@ const {
   toISO,
   isSnapLocked,
 } = require("../services/capsuleService");
+const { autoExpandIfNeeded } = require("../services/wallService");
+const { refundPayment } = require("../services/paymentService");
+const { isReservedByOther } = require("../services/reservationService");
 
 // Time-lock limits (the browser enforces these too, but the server is the
 // one that actually decides).
@@ -71,6 +74,9 @@ function serializeSnap(snap) {
     ...rest,
     unlockAt: toISO(snap.unlockAt),
     publishedAt: toISO(snap.publishedAt),
+    // NEW: when the owner hid it (the flag itself, ownerHidden, comes
+    // through in ...rest)
+    ownerHiddenAt: toISO(snap.ownerHiddenAt),
   };
 }
 
@@ -110,12 +116,22 @@ const HIDDEN_RESPONSE = {
   message: "This Snap has been hidden by the moderators.",
 };
 
+// NEW: the owner hid their own Snap
+const OWNER_HIDDEN_RESPONSE = {
+  success: false,
+  message: "This Snap has been hidden by its owner.",
+};
+
 const LOCKED_RESPONSE = {
   success: false,
   message: "This Snap is still locked. It becomes public when its time is up.",
 };
 
 async function createSnap(req, res) {
+  // NEW: set once the payment has been checked, so that if the SPACE turns
+  // out to be gone we know there is a valid payment to give back.
+  let paymentToRefund = null;
+
   try {
     const {
         spaceId,
@@ -125,9 +141,19 @@ async function createSnap(req, res) {
         snapType,
         location,
         unlockAt,
+        paymentId, // NEW: the verified Razorpay payment that buys this space
     } = req.body;
 
     const userId = req.user.uid;
+
+    // ---------- Payment (NEW) ----------
+    // Posting a Snap costs money: no verified payment, no Snap.
+    if (typeof paymentId !== "string" || paymentId.trim() === "") {
+      return res.status(402).json({
+        success: false,
+        message: "Payment is required to post a Snap",
+      });
+    }
 
     if (
       !userId ||
@@ -199,11 +225,44 @@ async function createSnap(req, res) {
 
     const snapRef = db.collection("snaps").doc();
 
+    // NEW: the payment this Snap is bought with, and the hold on the space.
+    const paymentRef = db.collection("payments").doc(paymentId.trim());
+    const reservationRef = db.collection("reservations").doc(String(spaceId));
+
     const result = await db.runTransaction(
       async (transaction) => {
-        const spaceSnapshot =
-          await transaction.get(spaceRef);
+        // All reads first (a Firestore transaction must read before it writes).
+        const [spaceSnapshot, paymentSnapshot, reservationSnapshot] =
+          await transaction.getAll(spaceRef, paymentRef, reservationRef);
 
+        // ---- 1. Is the payment real, this person's, for THIS space, unused?
+        // Checked before the space so a bad payment is never "refunded".
+        if (!paymentSnapshot.exists) {
+          throw new Error("PAYMENT_INVALID");
+        }
+
+        const payment = paymentSnapshot.data();
+
+        if (
+          payment.userId !== userId ||
+          payment.kind !== "space" ||
+          payment.spaceId !== String(spaceId) ||
+          payment.status !== "paid"
+        ) {
+          throw new Error(
+            payment.status === "refunded" || payment.status === "refunding"
+              ? "PAYMENT_REFUNDED"
+              : "PAYMENT_INVALID"
+          );
+        }
+
+        if (payment.snapId) {
+          throw new Error("PAYMENT_USED");
+        }
+
+        paymentToRefund = paymentId.trim();
+
+        // ---- 2. Is the space still available to this person?
         if (!spaceSnapshot.exists) {
           throw new Error("SPACE_NOT_FOUND");
         }
@@ -211,6 +270,14 @@ async function createSnap(req, res) {
         const spaceData = spaceSnapshot.data();
 
         if (spaceData.status === "occupied") {
+          throw new Error("SPACE_ALREADY_OCCUPIED");
+        }
+
+        // Someone else paid for it after this person's hold ran out.
+        if (
+          reservationSnapshot.exists &&
+          isReservedByOther(reservationSnapshot.data(), userId)
+        ) {
           throw new Error("SPACE_ALREADY_OCCUPIED");
         }
 
@@ -248,9 +315,24 @@ async function createSnap(req, res) {
           occupiedAt: now,
         });
 
+        // NEW: the payment is now spent on this Snap, and the hold is over.
+        transaction.update(paymentRef, {
+          snapId: snapRef.id,
+          usedAt: now,
+        });
+
+        transaction.delete(reservationRef);
+
         return snapData;
       }
     );
+
+    // NEW: if auto-expansion is on and the wall is getting full, add more
+    // spaces. Runs in the background — it must never slow down or fail
+    // the post the person just made.
+    autoExpandIfNeeded().catch((error) => {
+      console.error("Auto-expand failed:", error);
+    });
 
     return res.status(201).json({
       success: true,
@@ -264,19 +346,58 @@ async function createSnap(req, res) {
   } catch (error) {
     console.error("Create Snap error:", error);
 
-    if (error.message === "SPACE_NOT_FOUND") {
-      return res.status(404).json({
+    // NEW: payment problems
+    if (error.message === "PAYMENT_INVALID") {
+      return res.status(403).json({
         success: false,
-        message: "Space not found",
+        message: "This payment can't be used for this space",
       });
     }
 
-    if (
-      error.message === "SPACE_ALREADY_OCCUPIED"
-    ) {
+    if (error.message === "PAYMENT_REFUNDED") {
+      return res.status(403).json({
+        success: false,
+        message: "This payment has been refunded and can't be used",
+      });
+    }
+
+    if (error.message === "PAYMENT_USED") {
       return res.status(409).json({
         success: false,
-        message: "This space has already been taken",
+        message: "This payment has already been used for a Snap",
+      });
+    }
+
+    // CHANGED: if the space is gone AFTER a valid payment, the money goes
+    // straight back to the person — they never pay for nothing.
+    if (
+      error.message === "SPACE_NOT_FOUND" ||
+      error.message === "SPACE_ALREADY_OCCUPIED"
+    ) {
+      const notFound = error.message === "SPACE_NOT_FOUND";
+      const base = notFound
+        ? "Space not found."
+        : "This space has already been taken.";
+
+      let refunded = false;
+
+      if (paymentToRefund) {
+        try {
+          ({ refunded } = await refundPayment(
+            paymentToRefund,
+            notFound ? "space not found" : "space already taken"
+          ));
+        } catch (refundError) {
+          console.error("Refund error:", refundError);
+        }
+      }
+
+      return res.status(notFound ? 404 : 409).json({
+        success: false,
+        refunded,
+        message: refunded
+          ? `${base} Your payment has been refunded.`
+          : `${base} We couldn't refund your payment automatically — please contact support with payment ID ${paymentToRefund}.`,
       });
     }
 
@@ -516,6 +637,10 @@ async function likeSnap(req, res) {
       return res.status(403).json(HIDDEN_RESPONSE);
     }
 
+    if (snapSnapshot.data().ownerHidden === true) {
+      return res.status(403).json(OWNER_HIDDEN_RESPONSE);
+    }
+
     const likeRef = snapRef
       .collection("likes")
       .doc(userId);
@@ -686,6 +811,10 @@ async function saveSnap(req, res) {
       return res.status(403).json(HIDDEN_RESPONSE);
     }
 
+    if (snapSnapshot.data().ownerHidden === true) {
+      return res.status(403).json(OWNER_HIDDEN_RESPONSE);
+    }
+
     const saveRef = snapRef
       .collection("saves")
       .doc(userId);
@@ -825,7 +954,8 @@ async function getSavedSnaps(req, res) {
         .doc(userId)
         .get();
 
-      if (saveDoc.exists) {
+      // NEW: skip Snaps their owner has hidden
+      if (saveDoc.exists && snapDoc.data().ownerHidden !== true) {
         savedSnaps.push({
           id: snapDoc.id,
           ...snapDoc.data(),
@@ -867,7 +997,8 @@ async function getLikedSnaps(req, res) {
         .doc(userId)
         .get();
 
-      if (likeDoc.exists) {
+      // NEW: skip Snaps their owner has hidden
+      if (likeDoc.exists && snapDoc.data().ownerHidden !== true) {
         likedSnaps.push({
           id: snapDoc.id,
           ...snapDoc.data(),

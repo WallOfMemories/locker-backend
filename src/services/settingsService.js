@@ -2,6 +2,15 @@ const { db } = require("../config/firebase");
 
 const SNAPWALL_SETTINGS_ID = "snapwall";
 
+// CHANGED: added `autoExpand` (off by default). The wall only grows by
+// itself once an admin switches it on from the Wall Size page.
+const DEFAULT_SETTINGS = {
+  spacePrice: 2,
+  expansionThreshold: 80,
+  expansionBatchSize: 50,
+  autoExpand: false,
+};
+
 async function getSnapWallSettings() {
   const doc = await db
     .collection("settings")
@@ -35,24 +44,41 @@ async function createDefaultSnapWallSettings() {
     };
   }
 
-  const settings = {
-    spacePrice: 2,
-    expansionThreshold: 80,
-    expansionBatchSize: 50,
-  };
-
-  await settingsRef.set(settings);
+  await settingsRef.set(DEFAULT_SETTINGS);
 
   return {
     created: true,
     settings: {
       id: SNAPWALL_SETTINGS_ID,
-      ...settings,
+      ...DEFAULT_SETTINGS,
     },
+  };
+}
+
+// NEW: admin edits. `updates` must already be validated (see
+// adminController). Only the fields passed in are changed.
+async function updateSnapWallSettings(updates) {
+  const settingsRef = db
+    .collection("settings")
+    .doc(SNAPWALL_SETTINGS_ID);
+
+  const existing = await settingsRef.get();
+
+  const merged = {
+    ...(existing.exists ? existing.data() : DEFAULT_SETTINGS),
+    ...updates,
+  };
+
+  await settingsRef.set(merged);
+
+  return {
+    id: SNAPWALL_SETTINGS_ID,
+    ...merged,
   };
 }
 
 module.exports = {
   getSnapWallSettings,
   createDefaultSnapWallSettings,
+  updateSnapWallSettings,
 };

@@ -82,11 +82,26 @@ async function getAllSpaces() {
 
     // Hidden by an admin: the space stays taken, but the photo and caption
     // are NOT sent to the browser.
+    // CHANGED: `hiddenBy` says who hid it, so the wall can word it right.
     if (snap.status === "hidden") {
       return {
         ...space,
         ownerId: snap.userId || "",
         hidden: true,
+        hiddenBy: "moderator",
+        username: user.username || "",
+        displayName: user.displayName || "",
+      };
+    }
+
+    // NEW: hidden by the owner themselves — same treatment (space stays
+    // taken, photo and caption are NOT sent), different wording.
+    if (snap.ownerHidden === true) {
+      return {
+        ...space,
+        ownerId: snap.userId || "",
+        hidden: true,
+        hiddenBy: "owner",
         username: user.username || "",
         displayName: user.displayName || "",
       };

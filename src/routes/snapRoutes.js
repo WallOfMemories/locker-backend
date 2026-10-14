@@ -9,6 +9,12 @@ const {
   reportSnap,
 } = require("../controllers/moderationController");
 
+// NEW: the owner hides / shows / deletes their own Snap
+const {
+  setSnapVisibility,
+  deleteSnap,
+} = require("../controllers/snapOwnerController");
+
 const {
   requireAuth,
 } = require("../middleware/authMiddleware");
@@ -29,6 +35,20 @@ router.get(
   "/my",
   requireAuth,
   getMySnaps
+);
+
+// NEW: hide / show my Snap  { hidden: true | false }
+router.put(
+  "/:snapId/visibility",
+  requireAuth,
+  setSnapVisibility
+);
+
+// NEW: delete my Snap (the space becomes available again, no refund)
+router.delete(
+  "/:snapId",
+  requireAuth,
+  deleteSnap
 );
 router.post(
   "/:snapId/like",

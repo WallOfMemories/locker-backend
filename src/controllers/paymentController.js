@@ -1,9 +1,23 @@
 const crypto = require("crypto");
 
 const razorpay = require("../config/razorpay");
+const { getSnapWallSettings } = require("../services/settingsService");
+const {
+  recordPayment,
+  listForUser,
+} = require("../services/paymentService");
+const {
+  SpaceError,
+  reserveSpace,
+  releaseSpace,
+} = require("../services/reservationService");
 
-const SNAP_PRICE = 2;
-const AMOUNT_IN_PAISE = SNAP_PRICE * 100;
+// Fallback only — the real price is read from settings/snapwall.spacePrice.
+const DEFAULT_SNAP_PRICE = 2;
+
+// Order notes use these so /verify knows what kind of payment it is.
+const SPACE_PURPOSE = "SnapWall space";
+const TEST_PURPOSE = "SnapWall test payment";
 
 // Razorpay's minimum order is 100 paise (₹1).
 const MIN_AMOUNT_IN_PAISE = 100;
@@ -56,14 +70,23 @@ async function createPaymentOrder(req, res) {
       });
     }
 
+    // NEW: make sure the space is still free, and hold it for this person
+    // while they pay — so nobody pays for a space that gets taken.
+    await reserveSpace(String(spaceId), userId);
+
+    // CHANGED: the price used to be a hard-coded constant, so it could
+    // drift from the price shown on the wall. Now both read settings.
+    const settings = await getSnapWallSettings();
+    const price = Number(settings?.spacePrice) || DEFAULT_SNAP_PRICE;
+
     const order = await razorpay.orders.create({
-      amount: AMOUNT_IN_PAISE,
+      amount: Math.round(price * 100),
       currency: "INR",
       receipt: makeReceipt("snap"),
       notes: {
         userId,
         spaceId: String(spaceId),
-        purpose: "SnapWall space",
+        purpose: SPACE_PURPOSE,
       },
     });
 
@@ -77,11 +100,62 @@ async function createPaymentOrder(req, res) {
       keyId: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
+    if (error instanceof SpaceError) {
+      return res.status(error.status).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+      });
+    }
+
     return handleRazorpayError(
       res,
       error,
       "Failed to create payment order"
     );
+  }
+}
+
+// NEW — POST /api/payments/release   { spaceId }
+// The person closed the payment window: free the space for others.
+async function releaseSpaceReservation(req, res) {
+  try {
+    const { spaceId } = req.body || {};
+
+    if (!spaceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Space ID is required",
+      });
+    }
+
+    await releaseSpace(String(spaceId), req.user.uid);
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Failed to release space:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to release the space",
+    });
+  }
+}
+
+// NEW — GET /api/payments/my
+// The logged-in person's payments, for the Payment History page.
+async function getMyPayments(req, res) {
+  try {
+    const data = await listForUser(req.user.uid);
+
+    return res.status(200).json({ success: true, ...data });
+  } catch (error) {
+    console.error("Failed to load payments:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load your payments",
+    });
   }
 }
 
@@ -103,7 +177,7 @@ async function createTestOrder(req, res) {
       receipt: makeReceipt("test"),
       notes: {
         userId,
-        purpose: "SnapWall test payment",
+        purpose: TEST_PURPOSE,
       },
     });
 
@@ -171,21 +245,64 @@ async function verifyPayment(req, res) {
     });
   }
 
-  // TODO (full implementation): this is where the payment is recorded and
-  // the space is unlocked. Before doing that, also (1) fetch the order with
-  // razorpay.orders.fetch(orderId) and confirm notes.userId === req.user.uid
-  // and the amount, and (2) make it idempotent so a replayed request can't
-  // grant a space twice.
-  return res.status(200).json({
-    success: true,
-    message: "Payment verified",
-    orderId,
-    paymentId,
-  });
+  // The payment is recorded (this is what the admin Payments page and the
+  // person's Payment History list). Before recording, the order is fetched
+  // from Razorpay to confirm it belongs to the logged-in user and to get the
+  // real amount. Recording is idempotent: the payment id is the document id,
+  // so a replayed request can't create a second record.
+  //
+  // The space is NOT claimed here — POST /api/snaps does that, and it only
+  // accepts a recorded, unused payment for that exact space.
+  try {
+    let order;
+
+    try {
+      order = await razorpay.orders.fetch(orderId);
+    } catch (error) {
+      return handleRazorpayError(
+        res,
+        error,
+        "Payment was verified but the order could not be confirmed"
+      );
+    }
+
+    if (order?.notes?.userId !== req.user.uid) {
+      return res.status(403).json({
+        success: false,
+        message: "This payment does not belong to your account",
+      });
+    }
+
+    const { created } = await recordPayment({
+      paymentId,
+      orderId,
+      userId: req.user.uid,
+      amountPaise: Number(order.amount) || 0,
+      currency: order.currency || "INR",
+      kind: order.notes?.purpose === TEST_PURPOSE ? "test" : "space",
+      spaceId: order.notes?.spaceId || "",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: created ? "Payment verified" : "Payment already verified",
+      orderId,
+      paymentId,
+    });
+  } catch (error) {
+    console.error("Failed to record payment:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Payment was verified but could not be saved",
+    });
+  }
 }
 
 module.exports = {
   createPaymentOrder,
+  releaseSpaceReservation,
+  getMyPayments,
   createTestOrder,
   verifyPayment,
 };
