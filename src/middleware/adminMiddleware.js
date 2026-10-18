@@ -11,6 +11,13 @@ async function requireAdmin(req, res, next) {
   try {
     const uid = req.user?.uid;
 
+    if (!uid) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
     const allowList = (process.env.ADMIN_UIDS || "")
       .split(",")
       .map((value) => value.trim())

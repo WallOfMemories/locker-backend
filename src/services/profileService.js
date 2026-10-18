@@ -1,4 +1,5 @@
 const { db } = require("../config/firebase");
+const { isAllowedPhotoUrl } = require("../utils/validate");
 
 const USERNAME_REGEX = /^[a-z0-9_.]{3,20}$/;
 
@@ -43,7 +44,7 @@ async function isUsernameAvailable(username, uid) {
 // Validates fields and writes the profile. When a username is
 // included it is claimed inside a transaction so it stays unique.
 async function saveProfile(uid, input) {
-  const { username, displayName, bio, photoURL } = input;
+  const { username, displayName, bio, photoURL } = input || {};
 
   const updates = { updatedAt: new Date() };
 
@@ -78,7 +79,15 @@ async function saveProfile(uid, input) {
   }
 
   if (photoURL !== undefined) {
-    updates.photoURL = String(photoURL || "");
+    if (
+      !isAllowedPhotoUrl(photoURL, {
+        bucket: process.env.FIREBASE_STORAGE_BUCKET || "",
+      })
+    ) {
+      throw new ProfileError(400, "That profile photo is not valid.");
+    }
+
+    updates.photoURL = photoURL || "";
   }
 
   let newUsername = null;

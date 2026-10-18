@@ -1,104 +1,72 @@
-const express = require("express");
-const cors = require("cors");
 require("dotenv").config();
 
-const { db } = require("./config/firebase");
+const { loadConfig } = require("./config/env");
 
-const spaceRoutes = require("./routes/spaceRoutes");
-const settingsRoutes = require("./routes/settingsRoutes");
-const snapRoutes = require("./routes/snapRoutes");
-const paymentRoutes = require("./routes/paymentRoutes");
-const userRoutes = require("./routes/userRoutes");
-const authRoutes = require("./routes/authRoutes");
-const locationRoutes = require("./routes/locationRoutes");
-const adminRoutes = require("./routes/adminRoutes");
-// NEW: notifications (liked, saved, capsule opened, moderation, refunds)
-const notificationRoutes = require("./routes/notificationRoutes");
-// NEW: Settings page (privacy, delete account, support)
-const accountRoutes = require("./routes/accountRoutes");
+// Check the environment BEFORE anything connects to Firebase / Razorpay, so
+// a missing or unsafe setting stops the deploy with a readable message.
+const { config, problems, warnings } = loadConfig();
+
+warnings.forEach((warning) => console.warn(`[config] WARNING: ${warning}`));
+
+if (problems.length > 0) {
+  problems.forEach((problem) => console.error(`[config] ERROR: ${problem}`));
+  console.error("Fix the settings above (see .env.example) and start again.");
+  process.exit(1);
+}
+
+const { createApp } = require("./app");
+const { closeRedis } = require("./config/redis");
 const { startAccountDeletionScheduler } = require("./services/accountService");
 const { startCapsuleScheduler } = require("./services/capsuleService");
 
-const app = express();
+const app = createApp(config);
 
-const PORT = process.env.PORT || 5000;
+const server = app.listen(config.port, () => {
+  console.log(
+    `SnapWall backend running on port ${config.port} (${
+      config.isProduction ? "production" : "development"
+    })`
+  );
 
-app.use(cors());
-app.use(express.json());
+  // Background jobs. With more than one instance, run them on ONE only
+  // (set RUN_SCHEDULERS=false on the others).
+  if (config.runSchedulers) {
+    // Unlocks Time Capsules whose date has passed (checks every minute).
+    startCapsuleScheduler();
 
-
-
-// ===============================
-// Basic Routes
-// ===============================
-
-app.get("/", (req, res) => {
-  res.json({
-    success: true,
-    message: "SnapWall API is running",
-  });
-});
-
-
-app.get("/api/health", (req, res) => {
-  res.json({
-    success: true,
-    message: "SnapWall backend is healthy",
-  });
-});
-
-
-// ===============================
-// Firebase Test
-// ===============================
-
-app.get("/api/firebase-test", async (req, res) => {
-  try {
-    await db.collection("users").limit(1).get();
-
-    res.json({
-      success: true,
-      message: "Firebase Admin connected successfully",
-    });
-  } catch (error) {
-    console.error("Firebase connection error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Firebase connection failed",
-    });
+    // Permanently deletes accounts whose 30-day grace period is over.
+    startAccountDeletionScheduler();
   }
 });
 
+// Slow-loris protection and sane keep-alive behind a load balancer.
+server.headersTimeout = 20 * 1000;
+server.requestTimeout = 30 * 1000;
+server.keepAliveTimeout = 65 * 1000;
 
-// ===============================
-// SnapWall Routes
-// ===============================
+// ---------- graceful shutdown (deploys send SIGTERM) ----------
+let shuttingDown = false;
 
-app.use("/api/spaces", spaceRoutes);
-app.use("/api/settings", settingsRoutes);
-app.use("/api/snaps", snapRoutes);
-app.use("/api/payments", paymentRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/auth", authRoutes);
-app.use("/api/locations", locationRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/notifications", notificationRoutes); // NEW
-app.use("/api/account", accountRoutes); // NEW
+function shutdown(signal) {
+  if (shuttingDown) return;
 
+  shuttingDown = true;
+  console.log(`${signal} received — shutting down`);
 
-// ===============================
-// Start Server
-// ===============================
+  server.close(() => closeRedis().finally(() => process.exit(0)));
 
-app.listen(PORT, () => {
-  console.log(
-    `SnapWall backend running on port ${PORT}`
-  );
+  // Don't hang forever on open connections.
+  setTimeout(() => process.exit(1), 10 * 1000).unref();
+}
 
-  // Unlocks Time Capsules whose date has passed (checks every minute).
-  startCapsuleScheduler();
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
-  // NEW: permanently deletes accounts whose 30-day grace period is over.
-  startAccountDeletionScheduler();
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
+  shutdown("uncaughtException");
 });

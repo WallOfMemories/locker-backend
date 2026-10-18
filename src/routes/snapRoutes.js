@@ -9,7 +9,7 @@ const {
   reportSnap,
 } = require("../controllers/moderationController");
 
-// NEW: the owner hides / shows / deletes their own Snap
+// The owner hides / shows / deletes their own Snap
 const {
   setSnapVisibility,
   deleteSnap,
@@ -19,89 +19,43 @@ const {
   requireAuth,
 } = require("../middleware/authMiddleware");
 
+const { writeLimiter } = require("../middleware/rateLimiters");
+const { validateParams } = require("../utils/validate");
+
 const router = express.Router();
 
-router.post(
-  "/",
-  requireAuth,
-  createSnap
-);
-router.patch(
-  "/:snapId",
-  requireAuth,
-  updateSnap
-);
-router.get(
-  "/my",
-  requireAuth,
-  getMySnaps
-);
+// Every route here needs a signed-in person, and every :snapId is checked
+// before it can reach the database.
+router.use(requireAuth);
 
-// NEW: hide / show my Snap  { hidden: true | false }
+router.post("/", writeLimiter, createSnap);
+
+// Fixed paths first (they must never be read as a :snapId).
+router.get("/my", getMySnaps);
+router.get("/saved", getSavedSnaps);
+router.get("/liked", getLikedSnaps);
+
+router.patch("/:snapId", writeLimiter, validateParams("snapId"), updateSnap);
+
+// Hide / show my Snap  { hidden: true | false }
 router.put(
   "/:snapId/visibility",
-  requireAuth,
+  writeLimiter,
+  validateParams("snapId"),
   setSnapVisibility
 );
 
-// NEW: delete my Snap (the space becomes available again, no refund)
-router.delete(
-  "/:snapId",
-  requireAuth,
-  deleteSnap
-);
-router.post(
-  "/:snapId/like",
-  requireAuth,
-  likeSnap
-);
+// Delete my Snap (the space becomes available again, no refund)
+router.delete("/:snapId", writeLimiter, validateParams("snapId"), deleteSnap);
 
-router.delete(
-  "/:snapId/like",
-  requireAuth,
-  unlikeSnap
-);
+router.post("/:snapId/like", writeLimiter, validateParams("snapId"), likeSnap);
+router.delete("/:snapId/like", writeLimiter, validateParams("snapId"), unlikeSnap);
+router.get("/:snapId/likes", validateParams("snapId"), getSnapLikeInfo);
 
-router.get(
-  "/:snapId/likes",
-  requireAuth,
-  getSnapLikeInfo
-);
+router.post("/:snapId/save", writeLimiter, validateParams("snapId"), saveSnap);
+router.delete("/:snapId/save", writeLimiter, validateParams("snapId"), unsaveSnap);
+router.get("/:snapId/save", validateParams("snapId"), getSnapSaveInfo);
 
-router.post(
-  "/:snapId/save",
-  requireAuth,
-  saveSnap
-);
-
-router.delete(
-  "/:snapId/save",
-  requireAuth,
-  unsaveSnap
-);
-
-router.get(
-  "/:snapId/save",
-  requireAuth,
-  getSnapSaveInfo
-);
-
-router.post(
-  "/:snapId/report",
-  requireAuth,
-  reportSnap
-);
-
-router.get(
-  "/saved",
-  requireAuth,
-  getSavedSnaps
-);
-
-router.get(
-  "/liked",
-  requireAuth,
-  getLikedSnaps
-);
+router.post("/:snapId/report", writeLimiter, validateParams("snapId"), reportSnap);
 
 module.exports = router;

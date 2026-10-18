@@ -13,6 +13,7 @@ const {
 } = require("../services/reservationService");
 // NEW: an account waiting to be deleted must not buy anything
 const { isDeletionPending } = require("../services/accountService");
+const { isSpaceId } = require("../utils/validate");
 
 const DELETION_PENDING_RESPONSE = {
   success: false,
@@ -74,12 +75,12 @@ async function createPaymentOrder(req, res) {
       return res.status(403).json(DELETION_PENDING_RESPONSE);
     }
 
-    const { spaceId } = req.body;
+    const { spaceId } = req.body || {};
 
-    if (!spaceId) {
+    if (!isSpaceId(spaceId)) {
       return res.status(400).json({
         success: false,
-        message: "Space ID is required",
+        message: "A valid space ID is required",
       });
     }
 
@@ -135,10 +136,10 @@ async function releaseSpaceReservation(req, res) {
   try {
     const { spaceId } = req.body || {};
 
-    if (!spaceId) {
+    if (!isSpaceId(spaceId)) {
       return res.status(400).json({
         success: false,
-        message: "Space ID is required",
+        message: "A valid space ID is required",
       });
     }
 
@@ -174,6 +175,19 @@ async function getMyPayments(req, res) {
 
 // POST /api/payments/test-order  (TEST ONLY)
 async function createTestOrder(req, res) {
+  // The ₹1 test button must not exist on a live site (it would let anyone
+  // create real charges that are never refunded). Opt in with
+  // ENABLE_TEST_PAYMENTS=true when testing on a staging deployment.
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_TEST_PAYMENTS !== "true"
+  ) {
+    return res.status(404).json({
+      success: false,
+      message: "Not found",
+    });
+  }
+
   try {
     const userId = req.user.uid;
 
@@ -230,7 +244,10 @@ async function verifyPayment(req, res) {
   } = req.body || {};
 
   const hasAllFields = [orderId, paymentId, signature].every(
-    (value) => typeof value === "string" && value.trim() !== ""
+    (value) =>
+      typeof value === "string" &&
+      value.trim() !== "" &&
+      value.length <= 128
   );
 
   if (!hasAllFields) {
@@ -316,7 +333,105 @@ async function verifyPayment(req, res) {
   }
 }
 
+// POST /api/payments/webhook   (called by Razorpay, not by the browser)
+//
+// Safety net for "paid, then closed the tab before /verify ran". Razorpay
+// tells us about every captured payment; we check its signature, ask
+// Razorpay for the order (the source of truth for who it belongs to), and
+// record it exactly like /verify does. Recording is idempotent, so it makes
+// no difference whether /verify, the webhook, or both arrive.
+//
+// Set up in Razorpay Dashboard > Settings > Webhooks:
+//   URL:    https://<your-api>/api/payments/webhook
+//   Secret: same value as RAZORPAY_WEBHOOK_SECRET
+//   Events: payment.captured (and order.paid)
+//
+// Must receive the RAW body (see app.js) — the signature covers exact bytes.
+async function razorpayWebhook(req, res) {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+  if (!secret) {
+    return res.status(503).json({ success: false, message: "Webhook not configured" });
+  }
+
+  const rawBody = req.body;
+  const received = req.get("x-razorpay-signature") || "";
+
+  if (!Buffer.isBuffer(rawBody) || !received) {
+    return res.status(400).json({ success: false, message: "Invalid webhook" });
+  }
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody)
+    .digest("hex");
+
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(received, "utf8");
+
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(400).json({ success: false, message: "Invalid signature" });
+  }
+
+  let event;
+
+  try {
+    event = JSON.parse(rawBody.toString("utf8"));
+  } catch {
+    return res.status(400).json({ success: false, message: "Invalid JSON" });
+  }
+
+  // Only successful payments matter here; acknowledge everything else so
+  // Razorpay stops retrying it.
+  if (event?.event !== "payment.captured" && event?.event !== "order.paid") {
+    return res.status(200).json({ success: true, ignored: true });
+  }
+
+  try {
+    const payment = event.payload?.payment?.entity;
+    const paymentId = payment?.id;
+    const orderId = payment?.order_id || event.payload?.order?.entity?.id;
+
+    if (
+      typeof paymentId !== "string" ||
+      typeof orderId !== "string" ||
+      !paymentId ||
+      !orderId
+    ) {
+      return res.status(200).json({ success: true, ignored: true });
+    }
+
+    const order = await razorpay.orders.fetch(orderId);
+    const userId = order?.notes?.userId;
+
+    // Not an order created by this app: nothing to record.
+    if (!userId) {
+      return res.status(200).json({ success: true, ignored: true });
+    }
+
+    const { created } = await recordPayment({
+      paymentId,
+      orderId,
+      userId,
+      amountPaise: Number(order.amount) || 0,
+      currency: order.currency || "INR",
+      kind: order.notes?.purpose === TEST_PURPOSE ? "test" : "space",
+      spaceId: order.notes?.spaceId || "",
+    });
+
+    if (created) console.log(`Webhook recorded payment ${paymentId}`);
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Webhook processing failed:", error);
+
+    // 5xx makes Razorpay retry later.
+    return res.status(500).json({ success: false, message: "Could not process webhook" });
+  }
+}
+
 module.exports = {
+  razorpayWebhook,
   createPaymentOrder,
   releaseSpaceReservation,
   getMyPayments,

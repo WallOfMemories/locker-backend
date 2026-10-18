@@ -11,6 +11,12 @@ const { isReservedByOther } = require("../services/reservationService");
 const { notifySnapLiked } = require("../services/notificationService");
 // NEW: honour each author's privacy settings
 const { getPrivacy } = require("../services/privacyService");
+const {
+  isSafeId,
+  isSpaceId,
+  isOwnSnapStoragePath,
+  isFirebaseDownloadUrl,
+} = require("../utils/validate");
 
 // Time-lock limits (the browser enforces these too, but the server is the
 // one that actually decides).
@@ -154,7 +160,7 @@ async function createSnap(req, res) {
         location,
         unlockAt,
         paymentId, // NEW: the verified Razorpay payment that buys this space
-    } = req.body;
+    } = req.body || {};
 
     const userId = req.user.uid;
 
@@ -176,6 +182,47 @@ async function createSnap(req, res) {
       return res.status(400).json({
         success: false,
         message: "Missing required Snap information",
+      });
+    }
+
+    // ---------- Shape checks (everything here is untrusted input) ----------
+    if (!isSpaceId(spaceId) || !isSafeId(paymentId.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid space or payment",
+      });
+    }
+
+    if (caption !== undefined && caption !== null && typeof caption !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Caption must be text",
+      });
+    }
+
+    if (
+      snapType !== undefined &&
+      snapType !== null &&
+      snapType !== "post" &&
+      snapType !== "capsule"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Snap type",
+      });
+    }
+
+    // The photo must be one this person uploaded to OUR Storage bucket.
+    if (
+      !isOwnSnapStoragePath(storagePath, userId) ||
+      !isFirebaseDownloadUrl(imageUrl, {
+        bucket: process.env.FIREBASE_STORAGE_BUCKET || "",
+        storagePath,
+      })
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "That photo is not valid. Please upload it again.",
       });
     }
 

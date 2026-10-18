@@ -1,46 +1,58 @@
 const { adminAuth } = require("../config/firebase");
 
-async function requireAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
+// Pulls "Bearer <token>" out of the Authorization header.
+function readBearerToken(req) {
+  const header = req.headers.authorization;
 
-    if (!authHeader) {
+  if (typeof header !== "string") return null;
+
+  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+
+  return match ? match[1] : null;
+}
+
+function makeAuth({ checkRevoked }) {
+  return async function auth(req, res, next) {
+    const token = readBearerToken(req);
+
+    if (!token) {
       return res.status(401).json({
         success: false,
         message: "Authentication required",
       });
     }
 
-    const token = authHeader.startsWith("Bearer ")
-      ? authHeader.split("Bearer ")[1]
-      : null;
+    try {
+      // checkRevoked also rejects accounts that were disabled or whose
+      // sessions were revoked (costs one extra Firebase lookup).
+      const decodedToken = await adminAuth.verifyIdToken(
+        token,
+        checkRevoked && process.env.AUTH_CHECK_REVOKED !== "false"
+      );
 
-    if (!token) {
+      req.user = decodedToken;
+
+      return next();
+    } catch (error) {
+      // Log the reason, never the token.
+      console.warn("Authentication failed:", error?.code || error?.message);
+
       return res.status(401).json({
         success: false,
-        message: "Invalid authorization header",
+        message: "Invalid or expired authentication token",
       });
     }
-
-    const decodedToken =
-        await adminAuth.verifyIdToken(token);
-
-    req.user = decodedToken;
-
-    next();
-  } catch (error) {
-    console.error(
-      "Authentication verification failed:",
-      error
-    );
-
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired authentication token",
-    });
-  }
+  };
 }
+
+// Normal routes: signature + expiry check (no extra network call).
+const requireAuth = makeAuth({ checkRevoked: false });
+
+// Money, admin and account-deletion routes: also checks the account has not
+// been disabled / signed out everywhere.
+const requireStrictAuth = makeAuth({ checkRevoked: true });
 
 module.exports = {
   requireAuth,
+  requireStrictAuth,
 };

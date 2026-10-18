@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// ------------------------------------------------------------
+// The browser must NEVER be able to write to the database directly:
+// every change (profiles, snaps, payments, roles, privacy...) goes through
+// this backend, which uses the Admin SDK and bypasses these rules.
+//
+// The only thing the app still does straight from the browser is create the
+// signed-in person's own first profile document (authService.ensureUserDoc)
+// and read it back (AuthContext). Even that is locked down so nobody can
+// create themselves as an admin or pre-claim a username.
+// ------------------------------------------------------------
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(
+             ['uid', 'email', 'displayName', 'username', 'photoURL', 'bio', 'role', 'createdAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.role == 'user'
+        && request.resource.data.username == ''
+        && request.resource.data.bio == ''
+        && (request.resource.data.email == null
+            || request.resource.data.email == request.auth.token.get('email', null));
+
+      // Profile edits, privacy, deletion requests: backend only.
+      allow update, delete: if false;
+    }
+
+    // Everything else (spaces, snaps, payments, reports, reservations,
+    // notifications, settings, supportRequests, usernames...) is backend only.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

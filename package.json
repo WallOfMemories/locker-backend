@@ -1,11 +1,12 @@
 {
-  "name": "backend",
+  "name": "snapwall-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "SnapWall API (Express + Firebase Admin + Razorpay)",
+  "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "test": "node --test \"test/*.test.js\""
   },
   "keywords": [],
   "author": "",
@@ -15,10 +16,21 @@
     "cors": "^2.8.6",
     "dotenv": "^18.0.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
     "firebase-admin": "^14.4.0",
-    "razorpay": "^2.9.8"
+    "helmet": "^8.3.0",
+    "rate-limit-redis": "^6.0.1",
+    "razorpay": "^2.9.8",
+    "redis": "^6.3.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

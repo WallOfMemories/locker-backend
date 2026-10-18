@@ -8,44 +8,28 @@ const {
   verifyPayment,
 } = require("../controllers/paymentController");
 
-const {
-  requireAuth,
-} = require("../middleware/authMiddleware");
+const { requireStrictAuth } = require("../middleware/authMiddleware");
+const { paymentLimiter } = require("../middleware/rateLimiters");
 
 const router = express.Router();
 
-router.post(
-  "/create-order",
-  requireAuth,
-  createPaymentOrder
-);
+// Money routes: account must still be enabled (checkRevoked) and each
+// person is rate limited.
+router.use(requireStrictAuth, paymentLimiter);
 
-// NEW: the person closed the payment window — free the space again.
-router.post(
-  "/release",
-  requireAuth,
-  releaseSpaceReservation
-);
+router.post("/create-order", createPaymentOrder);
 
-// NEW: the logged-in person's payments (Payment History page).
-router.get(
-  "/my",
-  requireAuth,
-  getMyPayments
-);
+// The person closed the payment window — free the space again.
+router.post("/release", releaseSpaceReservation);
 
-// TEST ONLY: ₹1 order for the Razorpay test button.
-router.post(
-  "/test-order",
-  requireAuth,
-  createTestOrder
-);
+// The logged-in person's payments (Payment History page).
+router.get("/my", getMyPayments);
+
+// TEST ONLY: ₹1 order for the Razorpay test button. Disabled in production
+// unless ENABLE_TEST_PAYMENTS=true.
+router.post("/test-order", createTestOrder);
 
 // Checks the signature Razorpay Checkout returns after payment.
-router.post(
-  "/verify",
-  requireAuth,
-  verifyPayment
-);
+router.post("/verify", verifyPayment);
 
 module.exports = router;

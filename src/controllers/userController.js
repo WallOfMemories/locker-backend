@@ -63,7 +63,7 @@ async function setupProfile(req, res) {
   try {
     const userId = req.user.uid;
 
-    const { username, displayName, bio, photoURL } = req.body;
+    const { username, displayName, bio, photoURL } = req.body || {};
 
     if (!displayName || !String(displayName).trim()) {
       return res.status(400).json({
@@ -104,7 +104,7 @@ async function updateMyProfile(req, res) {
   try {
     const userId = req.user.uid;
 
-    const { username, displayName, bio, photoURL } = req.body;
+    const { username, displayName, bio, photoURL } = req.body || {};
 
     const profile = await saveProfile(userId, {
       username,
