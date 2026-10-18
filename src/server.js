@@ -12,6 +12,11 @@ const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const locationRoutes = require("./routes/locationRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+// NEW: notifications (liked, saved, capsule opened, moderation, refunds)
+const notificationRoutes = require("./routes/notificationRoutes");
+// NEW: Settings page (privacy, delete account, support)
+const accountRoutes = require("./routes/accountRoutes");
+const { startAccountDeletionScheduler } = require("./services/accountService");
 const { startCapsuleScheduler } = require("./services/capsuleService");
 
 const app = express();
@@ -78,6 +83,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/locations", locationRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/notifications", notificationRoutes); // NEW
+app.use("/api/account", accountRoutes); // NEW
 
 
 // ===============================
@@ -91,4 +98,7 @@ app.listen(PORT, () => {
 
   // Unlocks Time Capsules whose date has passed (checks every minute).
   startCapsuleScheduler();
+
+  // NEW: permanently deletes accounts whose 30-day grace period is over.
+  startAccountDeletionScheduler();
 });

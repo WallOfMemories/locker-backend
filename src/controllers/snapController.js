@@ -7,6 +7,10 @@ const {
 const { autoExpandIfNeeded } = require("../services/wallService");
 const { refundPayment } = require("../services/paymentService");
 const { isReservedByOther } = require("../services/reservationService");
+// NEW: notify the owner when their Snap is liked
+const { notifySnapLiked } = require("../services/notificationService");
+// NEW: honour each author's privacy settings
+const { getPrivacy } = require("../services/privacyService");
 
 // Time-lock limits (the browser enforces these too, but the server is the
 // one that actually decides).
@@ -83,7 +87,9 @@ function serializeSnap(snap) {
 // Snaps only store the author's userId. Liked / Saved lists show other
 // people's Snaps, so look up each author once and attach their username +
 // photo (the browser can't read other users' profiles itself).
-async function withAuthors(snaps) {
+// CHANGED: takes the viewer's id, so a person always still sees their own
+// photo / location on their own Snaps.
+async function withAuthors(snaps, viewerId) {
   const userIds = [
     ...new Set(snaps.map((snap) => snap.userId).filter(Boolean)),
   ];
@@ -103,10 +109,16 @@ async function withAuthors(snaps) {
   return snaps.map((snap) => {
     const author = authors[snap.userId] || {};
 
+    // NEW: Settings > Privacy. Authors can hide their photo / location from
+    // other people (never from themselves).
+    const privacy = getPrivacy(author);
+    const isViewer = snap.userId === viewerId;
+
     return {
       ...snap,
       username: author.username || "",
-      userPhotoURL: author.photoURL || "",
+      userPhotoURL: isViewer || privacy.showPhoto ? author.photoURL || "" : "",
+      location: isViewer || privacy.showLocation ? snap.location || null : null,
     };
   });
 }
@@ -660,6 +672,11 @@ async function likeSnap(req, res) {
       createdAt: new Date(),
     });
 
+    // NEW: tell the owner. Not awaited — the like must feel instant, and
+    // a notification problem must never fail it (it never throws anyway).
+    // One notification per person per Snap, and none for your own Snap.
+    notifySnapLiked(snapId, snapSnapshot.data(), userId).catch(() => {});
+
     return res.status(200).json({
       success: true,
       liked: true,
@@ -965,7 +982,7 @@ async function getSavedSnaps(req, res) {
 
     return res.status(200).json({
       success: true,
-      snaps: (await withAuthors(savedSnaps)).map(serializeSnap),
+      snaps: (await withAuthors(savedSnaps, userId)).map(serializeSnap),
     });
   } catch (error) {
     console.error(
@@ -1008,7 +1025,7 @@ async function getLikedSnaps(req, res) {
 
     return res.status(200).json({
       success: true,
-      snaps: (await withAuthors(likedSnaps)).map(serializeSnap),
+      snaps: (await withAuthors(likedSnaps, userId)).map(serializeSnap),
     });
   } catch (error) {
     console.error(

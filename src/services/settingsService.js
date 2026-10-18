@@ -5,7 +5,9 @@ const SNAPWALL_SETTINGS_ID = "snapwall";
 // CHANGED: added `autoExpand` (off by default). The wall only grows by
 // itself once an admin switches it on from the Wall Size page.
 const DEFAULT_SETTINGS = {
-  spacePrice: 2,
+  // CHANGED: ₹2 -> ₹10. Only used the FIRST time the settings are created;
+  // an existing settings/snapwall document keeps its saved spacePrice.
+  spacePrice: 10,
   expansionThreshold: 80,
   expansionBatchSize: 50,
   autoExpand: false,

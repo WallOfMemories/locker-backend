@@ -1,5 +1,7 @@
 const { db, firebaseApp } = require("../config/firebase");
 const { FieldValue } = require("firebase-admin/firestore");
+// NEW: tell the owner what the moderators did to their Snap
+const { notifyModeration } = require("./notificationService");
 const { getStorage } = require("firebase-admin/storage");
 const { isSnapLocked, toISO } = require("./capsuleService");
 
@@ -308,7 +310,13 @@ async function moderateSnap(snapId, action, adminId) {
   const snapBefore = first.data();
 
   if (action === "hide") {
+    // NEW: only notify when this call really hid it (not when it was
+    // already hidden by someone else a moment ago).
+    let changed = false;
+
     await db.runTransaction(async (transaction) => {
+      changed = false; // transactions can retry
+
       const doc = await transaction.get(snapRef);
 
       if (!doc.exists) throw new ModerationError(404, "Snap not found");
@@ -317,6 +325,8 @@ async function moderateSnap(snapId, action, adminId) {
 
       if (snap.status === "hidden") return; // already hidden
 
+      changed = true;
+
       transaction.update(snapRef, {
         status: "hidden",
         hiddenPrevStatus: snap.status,
@@ -324,6 +334,8 @@ async function moderateSnap(snapId, action, adminId) {
         hiddenBy: adminId,
       });
     });
+
+    if (changed) await notifyModeration(snapId, snapBefore, "hide");
   }
 
   if (action === "unhide") {
@@ -345,6 +357,9 @@ async function moderateSnap(snapId, action, adminId) {
         hiddenBy: FieldValue.delete(),
       });
     });
+
+    // NEW: unhide either succeeds or throws above, so it always changed.
+    await notifyModeration(snapId, snapBefore, "unhide");
   }
 
   if (action === "safe") {
@@ -382,6 +397,9 @@ async function moderateSnap(snapId, action, adminId) {
     await db.recursiveDelete(snapRef.collection("likes"));
     await db.recursiveDelete(snapRef.collection("saves"));
     await deleteSnapFile(snapBefore.storagePath);
+
+    // NEW: the Snap is gone, but its owner should know why.
+    await notifyModeration(snapId, snapBefore, "delete");
   }
 
   // "unhide" is not a verdict on a report, so it leaves reports alone.

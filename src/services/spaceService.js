@@ -1,5 +1,7 @@
 const { db } = require("../config/firebase");
 const { isSnapLocked, toISO } = require("./capsuleService");
+// NEW: Settings > Privacy
+const { getPrivacy } = require("./privacyService");
 
 const spacesCollection = db.collection("spaces");
 
@@ -112,7 +114,8 @@ async function getAllSpaces() {
       ownerId: snap.userId || "",
       image: snap.imageUrl || "",
       caption: snap.caption || "",
-      location: snap.location || null,
+      // CHANGED: the owner can hide the place they tagged (Settings > Privacy)
+      location: getPrivacy(user).showLocation ? snap.location || null : null,
       username: user.username || "",
       displayName: user.displayName || "",
     };

@@ -1,6 +1,8 @@
 const { db } = require("../config/firebase");
 const razorpay = require("../config/razorpay");
 const { toISO } = require("./capsuleService");
+// NEW: tell the person when their payment is refunded
+const { notifyRefund } = require("./notificationService");
 
 // ------------------------------------------------------------
 // Payments
@@ -66,7 +68,9 @@ async function refundPayment(paymentId, reason) {
 
     transaction.update(ref, { status: "refunding" });
 
-    return true;
+    // CHANGED: was `true`. Returns who paid (an object is still truthy, so
+    // the `if (!claimed)` check below keeps working) for the notification.
+    return { userId: data.userId };
   });
 
   if (!claimed) return { refunded: false };
@@ -84,6 +88,10 @@ async function refundPayment(paymentId, reason) {
       refundedAt: new Date(),
       refundReason: reason,
     });
+
+    // NEW: not awaited and never throws, so it can't trip the catch below
+    // and wrongly flip a refunded payment back to "paid".
+    notifyRefund(claimed.userId, paymentId, reason).catch(() => {});
 
     return { refunded: true };
   } catch (error) {

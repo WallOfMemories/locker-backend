@@ -1,5 +1,7 @@
 const { db } = require("../config/firebase");
 const { FieldValue } = require("firebase-admin/firestore");
+// NEW: tell the owner when their Time Capsule opens
+const { buildNotification } = require("./notificationService");
 
 // ------------------------------------------------------------
 // Time-lock ("locker") helpers.
@@ -68,9 +70,11 @@ async function publishDueCapsules() {
     const batch = db.batch();
 
     snapshot.docs.forEach((doc) => {
+      const capsule = doc.data();
+
       // Hidden by an admin while still sealed: keep it hidden, but make sure
       // "unhide" restores it as published instead of locking it again.
-      if (doc.data().status === "hidden") {
+      if (capsule.status === "hidden") {
         batch.update(doc.ref, {
           hiddenPrevStatus: "published",
           publishedAt: now,
@@ -85,6 +89,26 @@ async function publishDueCapsules() {
         publishedAt: now,
         pendingUnlockAt: FieldValue.delete(),
       });
+
+      // NEW: "your capsule is open" notification. It goes in the SAME batch
+      // as the publish, so a capsule can never open without the owner being
+      // told, and (because pendingUnlockAt is deleted in this batch) it can
+      // never be sent twice. Skipped for admin-hidden capsules — those are
+      // not public, so there is nothing to announce yet.
+      if (capsule.userId) {
+        const { ref, data } = buildNotification(
+          capsule.userId,
+          `capsule_${doc.id}`,
+          {
+            type: "capsule_opened",
+            message: "Your Time Capsule is open — everyone can see it now",
+            snapId: doc.id,
+            snapCaption: capsule.caption,
+          }
+        );
+
+        batch.set(ref, data);
+      }
     });
 
     await batch.commit();

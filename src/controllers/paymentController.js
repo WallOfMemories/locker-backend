@@ -11,9 +11,18 @@ const {
   reserveSpace,
   releaseSpace,
 } = require("../services/reservationService");
+// NEW: an account waiting to be deleted must not buy anything
+const { isDeletionPending } = require("../services/accountService");
+
+const DELETION_PENDING_RESPONSE = {
+  success: false,
+  message:
+    "Your account is scheduled for deletion. Cancel the deletion in Settings before buying a space.",
+};
 
 // Fallback only — the real price is read from settings/snapwall.spacePrice.
-const DEFAULT_SNAP_PRICE = 2;
+// CHANGED: ₹2 -> ₹10
+const DEFAULT_SNAP_PRICE = 10;
 
 // Order notes use these so /verify knows what kind of payment it is.
 const SPACE_PURPOSE = "SnapWall space";
@@ -60,6 +69,10 @@ function handleRazorpayError(res, error, message) {
 async function createPaymentOrder(req, res) {
   try {
     const userId = req.user.uid;
+
+    if (await isDeletionPending(userId)) {
+      return res.status(403).json(DELETION_PENDING_RESPONSE);
+    }
 
     const { spaceId } = req.body;
 
@@ -163,6 +176,10 @@ async function getMyPayments(req, res) {
 async function createTestOrder(req, res) {
   try {
     const userId = req.user.uid;
+
+    if (await isDeletionPending(userId)) {
+      return res.status(403).json(DELETION_PENDING_RESPONSE);
+    }
 
     if (TEST_AMOUNT_IN_PAISE < MIN_AMOUNT_IN_PAISE) {
       return res.status(400).json({
