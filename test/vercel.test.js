@@ -31,3 +31,22 @@ test("on Vercel without CRON_SECRET / REDIS_URL it refuses to run", () => {
   assert.match(out.stderr, /CRON_SECRET is not set/);
   assert.match(out.stderr, /REDIS_URL is required on Vercel/);
 });
+
+// Vercel's runtime cannot require() ES-module-only packages. This once
+// crashed every request (ERR_REQUIRE_ESM from jwks-rsa -> jose). Loading with
+// require(esm) switched off reproduces the same restriction locally.
+test("all dependencies load without require(esm) support", () => {
+  const out = spawnSync(
+    "node",
+    [
+      "--no-experimental-require-module",
+      "-e",
+      `["firebase-admin/app","firebase-admin/auth","firebase-admin/firestore","firebase-admin/storage",
+        "razorpay","helmet","express-rate-limit","rate-limit-redis","redis","@vercel/functions"]
+        .forEach((m) => require(m)); process.stdout.write("LOADED");`,
+    ],
+    { cwd: __dirname + "/..", encoding: "utf8", timeout: 20000 }
+  );
+
+  assert.match(out.stdout, /LOADED/, out.stderr);
+});
