@@ -18,6 +18,9 @@ function getRedis() {
     disableOfflineQueue: true,
   });
 
+  // Every limiter waits for "ready" at start-up; that is expected.
+  client.setMaxListeners(50);
+
   client.on("error", (error) => {
     // Log at most once a minute so an outage doesn't flood the logs.
     if (Date.now() - lastLogged > 60 * 1000) {

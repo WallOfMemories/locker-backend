@@ -19,6 +19,7 @@ Object.assign(process.env, {
   CORS_ORIGINS: "https://app.example.com",
   FIREBASE_WEB_API_KEY: "web-key",
   RAZORPAY_WEBHOOK_SECRET: "whsec_test",
+  CRON_SECRET: "cron_test_secret",
 });
 
 const { loadConfig } = require("../src/config/env");
@@ -158,6 +159,17 @@ test("razorpay webhook checks the signature", async () => {
   const ok = await post(sign(body, "whsec_test"));
   assert.equal(ok.status, 200); // valid, but not an event we act on
   assert.equal((await ok.json()).ignored, true);
+});
+
+test("cron endpoints need the secret", async () => {
+  for (const path of ["/api/cron/capsules", "/api/cron/accounts"]) {
+    assert.equal((await fetch(`${base}${path}`)).status, 401);
+
+    const wrong = await fetch(`${base}${path}`, {
+      headers: { Authorization: "Bearer nope" },
+    });
+    assert.equal(wrong.status, 401);
+  }
 });
 
 test("unknown routes return JSON 404", async () => {

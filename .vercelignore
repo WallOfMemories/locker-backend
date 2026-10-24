@@ -1,0 +1,9 @@
+test
+Dockerfile
+.dockerignore
+firestore.rules
+storage.rules
+firebase.json
+*.md
+.env
+.env.*

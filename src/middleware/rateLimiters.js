@@ -19,8 +19,18 @@ function reply(message) {
 // Redis connection is up. Wait briefly for it instead of failing the
 // store's start-up; if Redis is genuinely down, fail fast (and the request
 // is let through, see passOnStoreError).
-function whenReady(redis, timeoutMs = 5000) {
+const STARTED_AT = Date.now();
+const STARTUP_GRACE_MS = 5000;
+
+function whenReady(redis) {
   if (redis.isReady) return Promise.resolve();
+
+  // Generous while the process is starting; afterwards a short wait, so a
+  // Redis outage never slows every request down.
+  const timeoutMs =
+    Date.now() - STARTED_AT < STARTUP_GRACE_MS
+      ? STARTUP_GRACE_MS - (Date.now() - STARTED_AT)
+      : 300;
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {

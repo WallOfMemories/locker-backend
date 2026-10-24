@@ -26,6 +26,8 @@ function loadConfig(env = process.env) {
     adminUids: list(env.ADMIN_UIDS),
     storageBucket: env.FIREBASE_STORAGE_BUCKET || "",
     runSchedulers: env.RUN_SCHEDULERS !== "false",
+    // Running as Vercel serverless functions (no always-on process).
+    isServerless: Boolean(env.VERCEL),
     // Revoked / disabled accounts are rejected on money + admin routes.
     checkRevoked: env.AUTH_CHECK_REVOKED !== "false",
   };
@@ -46,6 +48,20 @@ function loadConfig(env = process.env) {
   required.forEach((name) => {
     if (!env[name]) problems.push(`${name} is not set`);
   });
+
+  if (config.isServerless) {
+    if (!env.CRON_SECRET) {
+      problems.push(
+        "CRON_SECRET is not set — Time Capsules would never open and deleted accounts would never be purged (no always-on process on Vercel)"
+      );
+    }
+
+    if (!env.REDIS_URL) {
+      problems.push(
+        "REDIS_URL is required on Vercel — each request can run on a different instance, so in-memory rate limits would not work"
+      );
+    }
+  }
 
   if (isProduction) {
     if (config.corsOrigins.length === 0) {

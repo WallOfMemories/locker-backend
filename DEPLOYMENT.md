@@ -1,5 +1,7 @@
 # SnapWall backend — deployment & security notes
 
+> Deploying on **Vercel**? Follow `VERCEL.md`. This file covers always-on hosting (Render, Railway, Docker) and the security notes.
+
 ## 1. Deploy checklist
 
 1. **Environment**: copy `.env.example` to your host's environment settings and fill every value.

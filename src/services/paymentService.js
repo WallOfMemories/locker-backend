@@ -3,6 +3,7 @@ const razorpay = require("../config/razorpay");
 const { toISO } = require("./capsuleService");
 // NEW: tell the person when their payment is refunded
 const { notifyRefund } = require("./notificationService");
+const { runInBackground } = require("../utils/background");
 
 // ------------------------------------------------------------
 // Payments
@@ -91,7 +92,10 @@ async function refundPayment(paymentId, reason) {
 
     // NEW: not awaited and never throws, so it can't trip the catch below
     // and wrongly flip a refunded payment back to "paid".
-    notifyRefund(claimed.userId, paymentId, reason).catch(() => {});
+    runInBackground(
+      notifyRefund(claimed.userId, paymentId, reason),
+      "Refund notification"
+    );
 
     return { refunded: true };
   } catch (error) {

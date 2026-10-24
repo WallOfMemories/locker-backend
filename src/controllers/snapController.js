@@ -11,6 +11,7 @@ const { isReservedByOther } = require("../services/reservationService");
 const { notifySnapLiked } = require("../services/notificationService");
 // NEW: honour each author's privacy settings
 const { getPrivacy } = require("../services/privacyService");
+const { runInBackground } = require("../utils/background");
 const {
   isSafeId,
   isSpaceId,
@@ -389,9 +390,7 @@ async function createSnap(req, res) {
     // NEW: if auto-expansion is on and the wall is getting full, add more
     // spaces. Runs in the background — it must never slow down or fail
     // the post the person just made.
-    autoExpandIfNeeded().catch((error) => {
-      console.error("Auto-expand failed:", error);
-    });
+    runInBackground(autoExpandIfNeeded(), "Auto-expand");
 
     return res.status(201).json({
       success: true,
@@ -722,7 +721,10 @@ async function likeSnap(req, res) {
     // NEW: tell the owner. Not awaited — the like must feel instant, and
     // a notification problem must never fail it (it never throws anyway).
     // One notification per person per Snap, and none for your own Snap.
-    notifySnapLiked(snapId, snapSnapshot.data(), userId).catch(() => {});
+    runInBackground(
+      notifySnapLiked(snapId, snapSnapshot.data(), userId),
+      "Like notification"
+    );
 
     return res.status(200).json({
       success: true,

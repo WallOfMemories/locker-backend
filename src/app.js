@@ -16,6 +16,7 @@ const locationRoutes = require("./routes/locationRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const accountRoutes = require("./routes/accountRoutes");
+const cronRoutes = require("./routes/cronRoutes");
 
 const DEV_ORIGINS = [
   "http://localhost:5173",
@@ -126,6 +127,7 @@ function createApp(config) {
   app.use("/api/admin", adminRoutes);
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/account", accountRoutes);
+  app.use("/api/cron", cronRoutes);
 
   // ---------- Not found + errors ----------
   app.use((req, res) => {

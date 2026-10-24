@@ -320,6 +320,33 @@ async function purgeAccount(uid) {
   return true;
 }
 
+// One pass: permanently deletes (up to 10) accounts whose grace period is
+// over. Used by the hourly timer (always-on servers) and by the cron
+// endpoint (serverless hosting such as Vercel).
+async function purgeDueAccounts() {
+  const due = await usersCollection
+    .where("deletionScheduledFor", "<=", new Date())
+    .limit(10)
+    .get();
+
+  let purgedCount = 0;
+
+  for (const doc of due.docs) {
+    try {
+      const purged = await purgeAccount(doc.id);
+
+      if (purged) {
+        purgedCount += 1;
+        console.log(`Account ${doc.id} permanently deleted`);
+      }
+    } catch (error) {
+      console.error(`Account deletion failed for ${doc.id}:`, error);
+    }
+  }
+
+  return purgedCount;
+}
+
 // Checks every hour for accounts whose grace period is over.
 function startAccountDeletionScheduler() {
   let running = false;
@@ -330,20 +357,7 @@ function startAccountDeletionScheduler() {
     running = true;
 
     try {
-      const due = await usersCollection
-        .where("deletionScheduledFor", "<=", new Date())
-        .limit(10)
-        .get();
-
-      for (const doc of due.docs) {
-        try {
-          const purged = await purgeAccount(doc.id);
-
-          if (purged) console.log(`Account ${doc.id} permanently deleted`);
-        } catch (error) {
-          console.error(`Account deletion failed for ${doc.id}:`, error);
-        }
-      }
+      await purgeDueAccounts();
     } catch (error) {
       console.error("Account deletion scheduler error:", error);
     } finally {
@@ -423,6 +437,7 @@ module.exports = {
   requestDeletion,
   cancelDeletion,
   purgeAccount,
+  purgeDueAccounts,
   startAccountDeletionScheduler,
   createSupportRequest,
 };
