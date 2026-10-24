@@ -14,7 +14,7 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-const { createApp } = require("./app");
+const { createApp } = require("./createApp");
 const { closeRedis } = require("./config/redis");
 const { startAccountDeletionScheduler } = require("./services/accountService");
 const { startCapsuleScheduler } = require("./services/capsuleService");

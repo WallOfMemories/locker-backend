@@ -2,10 +2,10 @@
   "name": "snapwall-backend",
   "version": "1.0.0",
   "description": "SnapWall API (Express + Firebase Admin + Razorpay)",
-  "main": "src/server.js",
+  "main": "src/start.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+    "start": "node src/start.js",
+    "dev": "nodemon src/start.js",
     "test": "node --test \"test/*.test.js\""
   },
   "keywords": [],

@@ -4,6 +4,7 @@ const helmet = require("helmet");
 
 const { db } = require("./config/firebase");
 const { globalLimiter } = require("./middleware/rateLimiters");
+const { rateLimitStoreStatus } = require("./config/redis");
 const { razorpayWebhook } = require("./controllers/paymentController");
 
 const spaceRoutes = require("./routes/spaceRoutes");
@@ -108,7 +109,7 @@ function createApp(config) {
         ),
       ]);
 
-      res.json({ success: true });
+      res.json({ success: true, rateLimitStore: rateLimitStoreStatus() });
     } catch (error) {
       console.error("Readiness check failed:", error.message);
 

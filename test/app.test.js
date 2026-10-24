@@ -23,7 +23,7 @@ Object.assign(process.env, {
 });
 
 const { loadConfig } = require("../src/config/env");
-const { createApp } = require("../src/app");
+const { createApp } = require("../src/createApp");
 
 const { config, problems } = loadConfig();
 const app = createApp(config);

@@ -48,7 +48,23 @@ For minute-level opening, use one of:
   (events `payment.captured`, `order.paid`; same secret as `RAZORPAY_WEBHOOK_SECRET`). After the first test payment,
   check the webhook's delivery log in Razorpay shows a `200`.
 
-## 5. Limits to know about
+## 5. Troubleshooting
+- **Every request fails with `ERR_REQUIRE_ESM` (jwks-rsa / jose) in the logs**: an old copy of `package.json` /
+  `package-lock.json` is deployed. The fix is the `overrides` block in `package.json` (pins `jwks-rsa` to 3.x).
+  Commit **both** `package.json` and `package-lock.json`, push, and redeploy (Vercel installs from the lockfile).
+- **Home page `/` shows 500 `FUNCTION_INVOCATION_FAILED`, log says `Invalid export found in module ... app.js`**:
+  Vercel treats files named `app.js` / `server.js` / `index.js` as the entry point. They were renamed to
+  `src/createApp.js` and `src/start.js`; make sure the OLD `src/app.js` and `src/server.js` are deleted from your repo.
+- **`[redis] error: Socket closed unexpectedly` / "Redis is not ready" in the logs**: the app cannot connect to
+  Redis (rate limits then run per instance and are not shared). Open `https://<backend>/api/ready`: it shows
+  `"rateLimitStore":"redis"` when connected, `"redis-down"` when not. The first log line `[redis] connecting to ...`
+  shows the scheme, host and port being used. Usually the scheme is wrong: use `rediss://` (two s) when your provider
+  needs TLS (Upstash), `redis://` when it does not (many free Redis Cloud databases). Also check host, port and
+  password come from the same database.
+- **"Server is not configured"**: open the deployment Logs; each missing setting is listed.
+- **CORS errors in the browser**: `CORS_ORIGINS` must equal the frontend address exactly.
+
+## 6. Limits to know about
 - Free (Hobby) functions have a time limit (30 s is configured here); every route in this app is far quicker.
 - Cold starts add a moment to the first request after idle.
 - The place-search cache and the wall-expansion lock are per instance (harmless: worst case a repeated map lookup

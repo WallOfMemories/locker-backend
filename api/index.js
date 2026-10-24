@@ -1,6 +1,6 @@
 // Vercel entry point: every request is rewritten to this function (see
 // vercel.json). On an always-on server (Render, Railway, Docker) use
-// `npm start` (src/server.js) instead.
+// `npm start` (src/start.js) instead.
 const { loadConfig } = require("../src/config/env");
 
 const { config, problems, warnings } = loadConfig();
@@ -20,7 +20,7 @@ if (problems.length > 0) {
     res.end(JSON.stringify({ success: false, message: "Server is not configured" }));
   };
 } else {
-  const { createApp } = require("../src/app");
+  const { createApp } = require("../src/createApp");
 
   handler = createApp(config);
 }
