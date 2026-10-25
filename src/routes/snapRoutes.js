@@ -16,15 +16,34 @@ const {
 } = require("../controllers/snapOwnerController");
 
 const {
+  optionalAuth,
   requireAuth,
 } = require("../middleware/authMiddleware");
 
-const { writeLimiter } = require("../middleware/rateLimiters");
+const { writeLimiter, publicReadLimiter } = require("../middleware/rateLimiters");
 const { validateParams } = require("../utils/validate");
 
 const router = express.Router();
 
-// Every route here needs a signed-in person, and every :snapId is checked
+// PUBLIC (declared before requireAuth): visitors who are not logged in can see
+// how many likes a Snap has. Signed-in people also get their own liked / saved
+// state back. Nobody can like or save without logging in (routes below).
+router.get(
+  "/:snapId/likes",
+  publicReadLimiter,
+  optionalAuth,
+  validateParams("snapId"),
+  getSnapLikeInfo
+);
+router.get(
+  "/:snapId/save",
+  publicReadLimiter,
+  optionalAuth,
+  validateParams("snapId"),
+  getSnapSaveInfo
+);
+
+// Every other route here needs a signed-in person, and every :snapId is checked
 // before it can reach the database.
 router.use(requireAuth);
 
@@ -50,11 +69,9 @@ router.delete("/:snapId", writeLimiter, validateParams("snapId"), deleteSnap);
 
 router.post("/:snapId/like", writeLimiter, validateParams("snapId"), likeSnap);
 router.delete("/:snapId/like", writeLimiter, validateParams("snapId"), unlikeSnap);
-router.get("/:snapId/likes", validateParams("snapId"), getSnapLikeInfo);
 
 router.post("/:snapId/save", writeLimiter, validateParams("snapId"), saveSnap);
 router.delete("/:snapId/save", writeLimiter, validateParams("snapId"), unsaveSnap);
-router.get("/:snapId/save", validateParams("snapId"), getSnapSaveInfo);
 
 router.post("/:snapId/report", writeLimiter, validateParams("snapId"), reportSnap);
 

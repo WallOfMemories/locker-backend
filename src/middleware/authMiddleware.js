@@ -52,7 +52,26 @@ const requireAuth = makeAuth({ checkRevoked: false });
 // been disabled / signed out everywhere.
 const requireStrictAuth = makeAuth({ checkRevoked: true });
 
+// Public pages (the wall) read like / save counts without being signed in.
+// A good token sets req.user; no token, or a bad one, just means "visitor".
+async function optionalAuth(req, res, next) {
+  req.user = null;
+
+  const token = readBearerToken(req);
+
+  if (token) {
+    try {
+      req.user = await adminAuth.verifyIdToken(token, false);
+    } catch {
+      req.user = null;
+    }
+  }
+
+  return next();
+}
+
 module.exports = {
+  optionalAuth,
   requireAuth,
   requireStrictAuth,
 };

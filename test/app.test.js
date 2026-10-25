@@ -75,6 +75,10 @@ test("protected routes need a token", async () => {
   const routes = [
     ["GET", "/api/users/me"],
     ["POST", "/api/snaps"],
+    ["POST", "/api/snaps/abc123/like"],
+    ["POST", "/api/snaps/abc123/save"],
+    ["POST", "/api/snaps/abc123/report"],
+    ["GET", "/api/snaps/my"],
     ["POST", "/api/payments/create-order"],
     ["GET", "/api/admin/dashboard"],
     ["POST", "/api/spaces/initialize"],
@@ -86,6 +90,17 @@ test("protected routes need a token", async () => {
     const res = await fetch(`${base}${path}`, { method });
     assert.equal(res.status, 401, `${method} ${path}`);
   }
+});
+
+test("like / save counts are public: no token is not a 401, bad ids still are refused", async () => {
+  // A bad id is rejected by validation before any database call.
+  const noToken = await fetch(`${base}/api/snaps/bad.id!/likes`);
+  assert.equal(noToken.status, 400);
+
+  const garbage = await fetch(`${base}/api/snaps/bad.id!/save`, {
+    headers: { Authorization: "Bearer not-a-real-token" },
+  });
+  assert.equal(garbage.status, 400);
 });
 
 test("a garbage token is rejected", async () => {

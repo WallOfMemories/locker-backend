@@ -796,7 +796,7 @@ async function unlikeSnap(req, res) {
 
 async function getSnapLikeInfo(req, res) {
   try {
-    const userId = req.user.uid;
+    const userId = req.user?.uid || null;
     const { snapId } = req.params;
 
     const snapRef = db
@@ -812,23 +812,20 @@ async function getSnapLikeInfo(req, res) {
       });
     }
 
-    const likesSnapshot =
-      await snapRef
-        .collection("likes")
-        .get();
+    // count() asks Firestore for just the number instead of every like.
+    const countSnapshot = await snapRef
+      .collection("likes")
+      .count()
+      .get();
 
-    const userLikeRef =
-      snapRef
-        .collection("likes")
-        .doc(userId);
-
-    const userLikeSnapshot =
-      await userLikeRef.get();
+    const userLikeSnapshot = userId
+      ? await snapRef.collection("likes").doc(userId).get()
+      : null;
 
     return res.status(200).json({
       success: true,
-      likeCount: likesSnapshot.size,
-      liked: userLikeSnapshot.exists,
+      likeCount: countSnapshot.data().count,
+      liked: Boolean(userLikeSnapshot?.exists),
     });
   } catch (error) {
     console.error(
@@ -964,7 +961,7 @@ async function unsaveSnap(req, res) {
 
 async function getSnapSaveInfo(req, res) {
   try {
-    const userId = req.user.uid;
+    const userId = req.user?.uid || null;
     const { snapId } = req.params;
 
     const snapRef = db
@@ -980,15 +977,13 @@ async function getSnapSaveInfo(req, res) {
       });
     }
 
-    const saveRef = snapRef
-      .collection("saves")
-      .doc(userId);
-
-    const saveSnapshot = await saveRef.get();
+    const saveSnapshot = userId
+      ? await snapRef.collection("saves").doc(userId).get()
+      : null;
 
     return res.status(200).json({
       success: true,
-      saved: saveSnapshot.exists,
+      saved: Boolean(saveSnapshot?.exists),
     });
   } catch (error) {
     console.error(
@@ -1005,7 +1000,7 @@ async function getSnapSaveInfo(req, res) {
 
 async function getSavedSnaps(req, res) {
   try {
-    const userId = req.user.uid;
+    const userId = req.user?.uid || null;
 
     const snapsSnapshot = await db
       .collection("snaps")
@@ -1048,7 +1043,7 @@ async function getSavedSnaps(req, res) {
 
 async function getLikedSnaps(req, res) {
   try {
-    const userId = req.user.uid;
+    const userId = req.user?.uid || null;
 
     const snapsSnapshot = await db
       .collection("snaps")
