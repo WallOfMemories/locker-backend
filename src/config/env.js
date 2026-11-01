@@ -18,7 +18,7 @@ function loadConfig(env = process.env) {
     isProduction,
     port: Number(env.PORT) || 5000,
     // Origins allowed to call the API from a browser, e.g.
-    // "https://snapwall.app,https://www.snapwall.app"
+    // "https://thelocker.in,https://www.thelocker.in"
     corsOrigins: list(env.CORS_ORIGINS),
     // How many reverse proxies sit in front of the app (Render/Railway/
     // Heroku/Cloud Run = 1). Needed so rate limits see the real client IP.

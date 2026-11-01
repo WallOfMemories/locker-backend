@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 
 const razorpay = require("../config/razorpay");
-const { getSnapWallSettings } = require("../services/settingsService");
+const { getTheLockerSettings } = require("../services/settingsService");
 const {
   recordPayment,
   listForUser,
@@ -21,13 +21,17 @@ const DELETION_PENDING_RESPONSE = {
     "Your account is scheduled for deletion. Cancel the deletion in Settings before buying a space.",
 };
 
-// Fallback only — the real price is read from settings/snapwall.spacePrice.
+// Fallback only — the real price is read from settings/thelocker.spacePrice.
 // CHANGED: ₹2 -> ₹10
 const DEFAULT_SNAP_PRICE = 10;
 
 // Order notes use these so /verify knows what kind of payment it is.
-const SPACE_PURPOSE = "SnapWall space";
-const TEST_PURPOSE = "SnapWall test payment";
+const SPACE_PURPOSE = "The Locker space";
+const TEST_PURPOSE = "The Locker test payment";
+// Orders created before the rename carry the old name.
+const LEGACY_TEST_PURPOSE = "TheLocker test payment";
+const isTestPurpose = (purpose) =>
+  purpose === TEST_PURPOSE || purpose === LEGACY_TEST_PURPOSE;
 
 // Razorpay's minimum order is 100 paise (₹1).
 const MIN_AMOUNT_IN_PAISE = 100;
@@ -90,7 +94,7 @@ async function createPaymentOrder(req, res) {
 
     // CHANGED: the price used to be a hard-coded constant, so it could
     // drift from the price shown on the wall. Now both read settings.
-    const settings = await getSnapWallSettings();
+    const settings = await getTheLockerSettings();
     const price = Number(settings?.spacePrice) || DEFAULT_SNAP_PRICE;
 
     const order = await razorpay.orders.create({
@@ -313,7 +317,7 @@ async function verifyPayment(req, res) {
       userId: req.user.uid,
       amountPaise: Number(order.amount) || 0,
       currency: order.currency || "INR",
-      kind: order.notes?.purpose === TEST_PURPOSE ? "test" : "space",
+      kind: isTestPurpose(order.notes?.purpose) ? "test" : "space",
       spaceId: order.notes?.spaceId || "",
     });
 
@@ -415,7 +419,7 @@ async function razorpayWebhook(req, res) {
       userId,
       amountPaise: Number(order.amount) || 0,
       currency: order.currency || "INR",
-      kind: order.notes?.purpose === TEST_PURPOSE ? "test" : "space",
+      kind: isTestPurpose(order.notes?.purpose) ? "test" : "space",
       spaceId: order.notes?.spaceId || "",
     });
 

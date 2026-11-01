@@ -27,7 +27,7 @@ const NOMINATIM_URL =
 
 const USER_AGENT =
   process.env.NOMINATIM_USER_AGENT ||
-  "SnapWall/1.0 (set NOMINATIM_USER_AGENT in .env)";
+  "TheLocker/1.0 (set NOMINATIM_USER_AGENT in .env)";
 
 // Optional: where to rank results when the browser doesn't send the
 // user's position (e.g. set to your main city so local places win).

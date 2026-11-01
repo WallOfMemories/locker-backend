@@ -1,5 +1,5 @@
 const { db } = require("../config/firebase");
-const { getSnapWallSettings } = require("./settingsService");
+const { getTheLockerSettings } = require("./settingsService");
 const { toISO } = require("./capsuleService");
 
 // ------------------------------------------------------------
@@ -267,7 +267,7 @@ async function expandWall({ count, source = "manual", adminId = "system" }) {
 async function autoExpandIfNeeded() {
   if (expanding) return null;
 
-  const settings = await getSnapWallSettings();
+  const settings = await getTheLockerSettings();
 
   if (!settings || settings.autoExpand !== true) return null;
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------
 // Sets the price of a space (in rupees) in Firestore
-// (settings/snapwall.spacePrice) — the value the wall, the Create Snap
+// (settings/thelocker.spacePrice) — the value the wall, the Create Snap
 // button AND the Razorpay charge all read.
 //
 // Run it from the backend folder (the one with package.json and .env):
@@ -14,7 +14,7 @@
 // must load .env BEFORE firebase.js is required (it reads the credentials)
 require("dotenv").config();
 
-const { updateSnapWallSettings } = require("../services/settingsService");
+const { updateTheLockerSettings } = require("../services/settingsService");
 
 async function main() {
   const price = Number(process.argv[2]);
@@ -31,7 +31,7 @@ async function main() {
   }
 
   // Changes ONLY spacePrice; the other wall settings are kept.
-  const settings = await updateSnapWallSettings({ spacePrice: price });
+  const settings = await updateTheLockerSettings({ spacePrice: price });
 
   console.log(`Space price is now ₹${settings.spacePrice}`);
   process.exit(0);

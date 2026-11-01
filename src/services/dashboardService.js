@@ -1,5 +1,5 @@
 const { db } = require("../config/firebase");
-const { getSnapWallSettings } = require("./settingsService");
+const { getTheLockerSettings } = require("./settingsService");
 const { listExpansions } = require("./wallService");
 const { listForAdmin } = require("./paymentService");
 
@@ -38,7 +38,7 @@ async function getDashboard() {
     db.collection("reports").where("status", "==", "pending").select("snapId").get(),
     listForAdmin(5),
     listExpansions(),
-    getSnapWallSettings(),
+    getTheLockerSettings(),
   ]);
 
   const snapsWithReports = new Set(

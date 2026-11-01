@@ -1,8 +1,8 @@
 const express = require("express");
 
 const {
-  initializeSnapWallSettings,
-  getSnapWallSettings,
+  initializeTheLockerSettings,
+  getTheLockerSettings,
 } = require("../controllers/settingsController");
 
 const { requireStrictAuth } = require("../middleware/authMiddleware");
@@ -11,14 +11,14 @@ const { publicReadLimiter } = require("../middleware/rateLimiters");
 
 const router = express.Router();
 
-router.get("/", publicReadLimiter, getSnapWallSettings);
+router.get("/", publicReadLimiter, getTheLockerSettings);
 
 // One-time set-up: admins only.
 router.post(
   "/initialize",
   requireStrictAuth,
   requireAdmin,
-  initializeSnapWallSettings
+  initializeTheLockerSettings
 );
 
 module.exports = router;

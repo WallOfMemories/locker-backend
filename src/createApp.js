@@ -91,19 +91,19 @@ function createApp(config) {
 
   // ---------- Health ----------
   app.get("/", (req, res) => {
-    res.json({ success: true, message: "SnapWall API is running" });
+    res.json({ success: true, message: "The Locker API is running" });
   });
 
   // Liveness: is the process up? (cheap — platform probes call it often)
   app.get("/api/health", (req, res) => {
-    res.json({ success: true, message: "SnapWall backend is healthy" });
+    res.json({ success: true, message: "The Locker backend is healthy" });
   });
 
   // Readiness: can we reach the database? No details are exposed.
   app.get("/api/ready", async (req, res) => {
     try {
       await Promise.race([
-        db.collection("settings").doc("snapwall").get(),
+        db.collection("settings").doc("thelocker").get(),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error("timeout")), 5000)
         ),

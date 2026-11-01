@@ -92,7 +92,7 @@ async function getWall(req, res) {
   try {
     const [wall, settings, expansions] = await Promise.all([
       wallService.getWallInfo(),
-      settingsService.getSnapWallSettings(),
+      settingsService.getTheLockerSettings(),
       wallService.listExpansions(),
     ]);
 
@@ -143,7 +143,7 @@ async function updateWallSettings(req, res) {
       return res.status(400).json({ success: false, message: error });
     }
 
-    const settings = await settingsService.updateSnapWallSettings(updates);
+    const settings = await settingsService.updateTheLockerSettings(updates);
 
     return res.status(200).json({
       success: true,

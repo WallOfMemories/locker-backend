@@ -23,7 +23,7 @@ const app = createApp(config);
 
 const server = app.listen(config.port, () => {
   console.log(
-    `SnapWall backend running on port ${config.port} (${
+    `The Locker backend running on port ${config.port} (${
       config.isProduction ? "production" : "development"
     })`
   );

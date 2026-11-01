@@ -1,9 +1,9 @@
 const settingsService = require("../services/settingsService");
 
-async function initializeSnapWallSettings(req, res) {
+async function initializeTheLockerSettings(req, res) {
   try {
     const result =
-      await settingsService.createDefaultSnapWallSettings();
+      await settingsService.createDefaultTheLockerSettings();
 
     res.status(200).json({
       success: true,
@@ -12,26 +12,26 @@ async function initializeSnapWallSettings(req, res) {
     });
   } catch (error) {
     console.error(
-      "Error initializing SnapWall settings:",
+      "Error initializing The Locker settings:",
       error
     );
 
     res.status(500).json({
       success: false,
-      message: "Failed to initialize SnapWall settings.",
+      message: "Failed to initialize The Locker settings.",
     });
   }
 }
 
-async function getSnapWallSettings(req, res) {
+async function getTheLockerSettings(req, res) {
   try {
     const settings =
-      await settingsService.getSnapWallSettings();
+      await settingsService.getTheLockerSettings();
 
     if (!settings) {
       return res.status(404).json({
         success: false,
-        message: "SnapWall settings not found.",
+        message: "The Locker settings not found.",
       });
     }
 
@@ -41,18 +41,18 @@ async function getSnapWallSettings(req, res) {
     });
   } catch (error) {
     console.error(
-      "Error fetching SnapWall settings:",
+      "Error fetching The Locker settings:",
       error
     );
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch SnapWall settings.",
+      message: "Failed to fetch The Locker settings.",
     });
   }
 }
 
 module.exports = {
-  initializeSnapWallSettings,
-  getSnapWallSettings,
+  initializeTheLockerSettings,
+  getTheLockerSettings,
 };

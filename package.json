@@ -1,7 +1,7 @@
 {
-  "name": "snapwall-backend",
+  "name": "the-locker-backend",
   "version": "1.0.0",
-  "description": "SnapWall API (Express + Firebase Admin + Razorpay)",
+  "description": "The Locker API (Express + Firebase Admin + Razorpay)",
   "main": "src/start.js",
   "scripts": {
     "start": "node src/start.js",

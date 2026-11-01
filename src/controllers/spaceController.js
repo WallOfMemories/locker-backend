@@ -14,7 +14,7 @@ async function getSpaces(req, res) {
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch SnapWall spaces.",
+      message: "Failed to fetch The Locker spaces.",
     });
   }
 }
@@ -26,19 +26,19 @@ async function initializeSpaces(req, res) {
 
     res.status(200).json({
       success: true,
-      message: "SnapWall spaces initialized successfully.",
+      message: "The Locker spaces initialized successfully.",
       created: result.created,
       total: result.total,
     });
   } catch (error) {
     console.error(
-      "Error initializing SnapWall spaces:",
+      "Error initializing The Locker spaces:",
       error
     );
 
     res.status(500).json({
       success: false,
-      message: "Failed to initialize SnapWall spaces.",
+      message: "Failed to initialize The Locker spaces.",
     });
   }
 }
