@@ -22,7 +22,11 @@ const {
 // Time-lock limits (the browser enforces these too, but the server is the
 // one that actually decides).
 const MIN_LOCK_MS = 60 * 1000; // at least 1 minute ahead
-const MAX_LOCK_YEARS = 10;
+// CHANGED: the old 10-year cap is gone. A capsule can now stay locked "forever".
+// A real "infinity" can't be stored — Firestore Timestamps stop at the end of
+// year 9999 — so that is the one hard ceiling (it also rejects garbage dates
+// like year 275760 that would crash the save).
+const MAX_UNLOCK_DATE = new Date("9999-12-31T23:59:59Z");
 const MAX_CAPTION_LENGTH = 100; // keep in sync with CreateSnap.jsx
 
 // Validates the optional location picked on the Create Snap page.
@@ -268,13 +272,11 @@ async function createSnap(req, res) {
         });
       }
 
-      const latest = new Date();
-      latest.setFullYear(latest.getFullYear() + MAX_LOCK_YEARS);
-
-      if (unlockDate > latest) {
+      // CHANGED: only the Firestore-safe ceiling (year 9999) is enforced now.
+      if (unlockDate > MAX_UNLOCK_DATE) {
         return res.status(400).json({
           success: false,
-          message: `A capsule can be locked for at most ${MAX_LOCK_YEARS} years`,
+          message: "Please pick a date before the year 9999",
         });
       }
     }
@@ -615,13 +617,11 @@ async function updateSnap(req, res) {
         });
       }
 
-      const latest = new Date();
-      latest.setFullYear(latest.getFullYear() + MAX_LOCK_YEARS);
-
-      if (unlockDate > latest) {
+      // CHANGED: only the Firestore-safe ceiling (year 9999) is enforced now.
+      if (unlockDate > MAX_UNLOCK_DATE) {
         return res.status(400).json({
           success: false,
-          message: `A capsule can be locked for at most ${MAX_LOCK_YEARS} years`,
+          message: "Please pick a date before the year 9999",
         });
       }
 
