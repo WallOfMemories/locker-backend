@@ -3,6 +3,7 @@ const express = require("express");
 
 const { publishDueCapsules } = require("../services/capsuleService");
 const { purgeDueAccounts } = require("../services/accountService");
+const { cleanupOrphanUploads } = require("../services/orphanUploadService"); // NEW
 
 // ------------------------------------------------------------
 // Background jobs for hosting that has no always-on process (Vercel).
@@ -58,6 +59,21 @@ router.get("/accounts", async (req, res) => {
     res.json({ success: true, purged });
   } catch (error) {
     console.error("Cron accounts failed:", error);
+    res.status(500).json({ success: false });
+  }
+});
+
+// NEW: deletes Snap photos that were uploaded but never used (older than 48 h).
+// Add ?dryRun=true to see what it WOULD delete without deleting anything.
+router.get("/orphan-uploads", async (req, res) => {
+  try {
+    const result = await cleanupOrphanUploads({
+      dryRun: req.query.dryRun === "true",
+    });
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("Cron orphan uploads failed:", error);
     res.status(500).json({ success: false });
   }
 });
