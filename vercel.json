@@ -26,6 +26,10 @@
     {
       "path": "/api/cron/orphan-uploads",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/bid-expiry",
+      "schedule": "0 2 * * *"
     }
   ]
 }

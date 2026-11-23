@@ -183,6 +183,65 @@ async function notifyRefund(userId, paymentId, reason) {
   });
 }
 
+// NEW: bidding. The box label matches the wall ("#13").
+function boxLabel(spaceId) {
+  const number = String(spaceId).match(/\d+/)?.[0];
+
+  return number ? `#${Number(number)}` : String(spaceId);
+}
+
+// The admin closed bidding and this person's bid was the highest.
+async function notifyBidWon(userId, spaceId, amount, payHours = 48) {
+  return notify(userId, `bidwon_${spaceId}_${Date.now()}`, {
+    type: "bid_won",
+    message: `Your bid for box ${boxLabel(spaceId)} was accepted at ₹${amount}. Pay within ${payHours} hours to claim it — open the box on the wall to pay and create your Snap.`,
+  });
+}
+
+// The accepted bidder didn't pay in time, so the box was opened up again.
+async function notifyBidExpired(userId, spaceId, payHours = 48) {
+  return notify(userId, `bidexpired_${spaceId}_${Date.now()}`, {
+    type: "bid_expired",
+    message: `You didn't pay for box ${boxLabel(spaceId)} within ${payHours} hours, so it was opened up for other bidders. You can bid again.`,
+  });
+}
+
+// The admin made a counter offer on this person's bid.
+async function notifyBidCountered(userId, spaceId, amount, replyHours = 48) {
+  return notify(userId, `bidcounter_${spaceId}_${Date.now()}`, {
+    type: "bid_countered",
+    message: `The admin sent a counter offer of ₹${amount} for box ${boxLabel(spaceId)}. Answer within ${replyHours} hours — open the box on the wall to accept or decline it.`,
+  });
+}
+
+// The bidder didn't answer a counter offer in time.
+async function notifyBidCounterExpired(userId, spaceId, replyHours = 48) {
+  return notify(userId, `bidcounterexp_${spaceId}_${Date.now()}`, {
+    type: "bid_expired",
+    message: `The counter offer for box ${boxLabel(spaceId)} expired because it wasn't answered within ${replyHours} hours. You can place a new bid.`,
+  });
+}
+
+// The admin declined this person's bid.
+async function notifyBidRejected(userId, spaceId) {
+  return notify(userId, `bidreject_${spaceId}_${Date.now()}`, {
+    type: "bid_rejected",
+    message: `Your bid for box ${boxLabel(spaceId)} was not accepted. You can place a new bid anytime.`,
+  });
+}
+
+// Bidding ended without this person winning, or the admin cancelled it.
+//   kind: "lost" | "cancelled"
+async function notifyBidEnded(userId, spaceId, kind) {
+  return notify(userId, `bidend_${spaceId}_${Date.now()}`, {
+    type: "bid_ended",
+    message:
+      kind === "cancelled"
+        ? `Bidding on box ${boxLabel(spaceId)} was cancelled.`
+        : `Box ${boxLabel(spaceId)} went to another bidder.`,
+  });
+}
+
 // ---------- reading / managing (used by the API) ----------
 
 function serialize(doc) {
@@ -297,6 +356,12 @@ module.exports = {
   notifySnapLiked,
   notifyModeration,
   notifyRefund,
+  notifyBidWon,
+  notifyBidEnded,
+  notifyBidCountered,
+  notifyBidRejected,
+  notifyBidExpired,
+  notifyBidCounterExpired,
   countUnread,
   listForUser,
   markRead,

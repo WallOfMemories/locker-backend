@@ -14,6 +14,7 @@ const {
 // NEW: an account waiting to be deleted must not buy anything
 const { isDeletionPending } = require("../services/accountService");
 const { isSpaceId } = require("../utils/validate");
+const { getPurchaseRule } = require("../services/bidService"); // NEW: bidding
 
 const DELETION_PENDING_RESPONSE = {
   success: false,
@@ -88,6 +89,19 @@ async function createPaymentOrder(req, res) {
       });
     }
 
+    // NEW: bidding. On the first boxes, once bids exist nobody can buy at
+    // the normal price; after the admin closes bidding only the winner can
+    // buy, and they pay THEIR winning bid (decided here, never by the browser).
+    const bidRule = await getPurchaseRule(String(spaceId), userId);
+
+    if (!bidRule.allowed) {
+      return res.status(409).json({
+        success: false,
+        code: bidRule.code,
+        message: bidRule.message,
+      });
+    }
+
     // NEW: make sure the space is still free, and hold it for this person
     // while they pay — so nobody pays for a space that gets taken.
     await reserveSpace(String(spaceId), userId);
@@ -95,7 +109,11 @@ async function createPaymentOrder(req, res) {
     // CHANGED: the price used to be a hard-coded constant, so it could
     // drift from the price shown on the wall. Now both read settings.
     const settings = await getTheLockerSettings();
-    const price = Number(settings?.spacePrice) || DEFAULT_SNAP_PRICE;
+    // CHANGED: a bid winner pays their winning bid instead of the normal price.
+    const price =
+      bidRule.amountRupees ||
+      Number(settings?.spacePrice) ||
+      DEFAULT_SNAP_PRICE;
 
     const order = await razorpay.orders.create({
       amount: Math.round(price * 100),

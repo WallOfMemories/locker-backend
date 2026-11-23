@@ -13,6 +13,15 @@ const {
   updateWallSettings,
 } = require("../controllers/adminController");
 
+// NEW: bidding
+const {
+  adminBoard,
+  adminAccept,
+  adminReject,
+  adminCounter,
+  adminCancel,
+} = require("../controllers/bidController");
+
 const { requireStrictAuth } = require("../middleware/authMiddleware");
 const { requireAdmin } = require("../middleware/adminMiddleware");
 const { writeLimiter } = require("../middleware/rateLimiters");
@@ -42,5 +51,12 @@ router.get("/payments", getPayments);
 router.get("/wall", getWall);
 router.post("/wall/expand", writeLimiter, expandWall);
 router.put("/wall/settings", writeLimiter, updateWallSettings);
+
+// NEW: Bids (first boxes of the wall)
+router.get("/bids", adminBoard);
+router.post("/bids/:spaceId/:userId/accept", writeLimiter, adminAccept);
+router.post("/bids/:spaceId/:userId/reject", writeLimiter, adminReject);
+router.post("/bids/:spaceId/:userId/counter", writeLimiter, adminCounter);
+router.post("/bids/:spaceId/cancel", writeLimiter, adminCancel);
 
 module.exports = router;

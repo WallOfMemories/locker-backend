@@ -4,6 +4,7 @@ const express = require("express");
 const { publishDueCapsules } = require("../services/capsuleService");
 const { purgeDueAccounts } = require("../services/accountService");
 const { cleanupOrphanUploads } = require("../services/orphanUploadService"); // NEW
+const { sweepExpired } = require("../services/bidService"); // NEW
 
 // ------------------------------------------------------------
 // Background jobs for hosting that has no always-on process (Vercel).
@@ -74,6 +75,17 @@ router.get("/orphan-uploads", async (req, res) => {
     res.json({ success: true, ...result });
   } catch (error) {
     console.error("Cron orphan uploads failed:", error);
+    res.status(500).json({ success: false });
+  }
+});
+
+// NEW: accepted bidders who didn't pay within 48 hours lose the box
+// (it opens up again and they are told).
+router.get("/bid-expiry", async (req, res) => {
+  try {
+    res.json({ success: true, ...(await sweepExpired()) });
+  } catch (error) {
+    console.error("Cron bid expiry failed:", error);
     res.status(500).json({ success: false });
   }
 });

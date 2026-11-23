@@ -11,6 +11,7 @@ const spaceRoutes = require("./routes/spaceRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const snapRoutes = require("./routes/snapRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+const bidRoutes = require("./routes/bidRoutes"); // NEW
 const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const locationRoutes = require("./routes/locationRoutes");
@@ -122,6 +123,7 @@ function createApp(config) {
   app.use("/api/settings", settingsRoutes);
   app.use("/api/snaps", snapRoutes);
   app.use("/api/payments", paymentRoutes);
+  app.use("/api/bids", bidRoutes); // NEW
   app.use("/api/users", userRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/locations", locationRoutes);
