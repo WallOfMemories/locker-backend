@@ -18,6 +18,7 @@ const {
   isOwnSnapStoragePath,
   isFirebaseDownloadUrl,
 } = require("../utils/validate");
+const { sanitizeLocation } = require("../utils/location"); // NEW: countries only
 
 // Time-lock limits (the browser enforces these too, but the server is the
 // one that actually decides).
@@ -28,58 +29,6 @@ const MIN_LOCK_MS = 60 * 1000; // at least 1 minute ahead
 // like year 275760 that would crash the save).
 const MAX_UNLOCK_DATE = new Date("9999-12-31T23:59:59Z");
 const MAX_CAPTION_LENGTH = 100; // keep in sync with CreateSnap.jsx
-
-// Validates the optional location picked on the Create Snap page.
-// -> { ok: true, value: null | {...} } | { ok: false }
-function sanitizeLocation(raw) {
-  if (raw === undefined || raw === null) {
-    return { ok: true, value: null };
-  }
-
-  if (typeof raw !== "object") return { ok: false };
-
-  const name = String(raw.name || "").trim().slice(0, 120);
-  const address = String(raw.address || "").trim().slice(0, 255);
-
-  if (!name) return { ok: false };
-
-  // NEW: a place the person typed themselves (not found in the map data)
-  // is allowed without coordinates. If coordinates ARE sent they must be
-  // valid.
-  const hasCoords =
-    raw.lat !== null &&
-    raw.lat !== undefined &&
-    raw.lng !== null &&
-    raw.lng !== undefined;
-
-  let lat = null;
-  let lng = null;
-
-  if (hasCoords) {
-    lat = Number(raw.lat);
-    lng = Number(raw.lng);
-
-    if (
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lng) ||
-      Math.abs(lat) > 90 ||
-      Math.abs(lng) > 180
-    ) {
-      return { ok: false };
-    }
-  }
-
-  return {
-    ok: true,
-    value: {
-      name,
-      address,
-      lat,
-      lng,
-      placeId: raw.id ? String(raw.id).slice(0, 64) : null,
-    },
-  };
-}
 
 // Timestamps -> ISO strings for the browser; hides internal fields.
 function serializeSnap(snap) {

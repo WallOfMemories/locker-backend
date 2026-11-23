@@ -49,6 +49,29 @@ async function recordPayment(payment) {
   }
 }
 
+// NEW: has this person already PAID for this space without posting the Snap
+// yet? (They paid, then the page was refreshed / the upload failed.)
+// -> the payment id, or null. The server uses it so they are never charged a
+// second time: they simply finish posting with the payment they already made.
+async function findUnusedPaidPayment(userId, spaceId) {
+  const snapshot = await paymentsCollection
+    .where("spaceId", "==", spaceId)
+    .get();
+
+  const match = snapshot.docs.find((doc) => {
+    const payment = doc.data();
+
+    return (
+      payment.userId === userId &&
+      payment.kind === "space" &&
+      payment.status === "paid" &&
+      !payment.snapId
+    );
+  });
+
+  return match ? match.id : null;
+}
+
 // NEW: gives the money back for a payment that did NOT buy a Snap
 // (e.g. the space was taken while the person was paying).
 // Safe to call twice: the first call "claims" the refund inside a
@@ -305,6 +328,7 @@ async function listForUser(userId) {
 
 module.exports = {
   recordPayment,
+  findUnusedPaidPayment,
   refundPayment,
   listForAdmin,
   listForUser,

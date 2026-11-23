@@ -639,6 +639,7 @@ async function getPurchaseRule(spaceId, userId) {
         return {
           allowed: false,
           code: "ALREADY_PAID",
+          paymentId: paidPaymentId,
           message:
             "You've already paid for this box. Open it on the wall to finish creating your Snap.",
         };

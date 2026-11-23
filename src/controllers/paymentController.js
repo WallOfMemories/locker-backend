@@ -5,6 +5,7 @@ const { getTheLockerSettings } = require("../services/settingsService");
 const {
   recordPayment,
   listForUser,
+  findUnusedPaidPayment, // NEW: never charge twice for the same space
 } = require("../services/paymentService");
 const {
   SpaceError,
@@ -89,6 +90,21 @@ async function createPaymentOrder(req, res) {
       });
     }
 
+    // NEW: they may have ALREADY paid for this space (then refreshed the page,
+    // or the upload failed). Never start a second payment: hand back the one
+    // they made so the app can simply finish posting the Snap.
+    const alreadyPaidId = await findUnusedPaidPayment(userId, String(spaceId));
+
+    if (alreadyPaidId) {
+      return res.status(409).json({
+        success: false,
+        code: "ALREADY_PAID",
+        paymentId: alreadyPaidId,
+        message:
+          "You've already paid for this space. We'll finish posting your Snap — you won't be charged again.",
+      });
+    }
+
     // NEW: bidding. On the first boxes, once bids exist nobody can buy at
     // the normal price; after the admin closes bidding only the winner can
     // buy, and they pay THEIR winning bid (decided here, never by the browser).
@@ -98,6 +114,7 @@ async function createPaymentOrder(req, res) {
       return res.status(409).json({
         success: false,
         code: bidRule.code,
+        paymentId: bidRule.paymentId,
         message: bidRule.message,
       });
     }
