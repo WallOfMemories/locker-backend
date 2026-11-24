@@ -9,6 +9,12 @@ const { db } = require("../config/firebase");
 //
 // reservations/{spaceId} = { userId, expiresAt, createdAt }
 //
+// NEW — PAID reservations ("pay first, post whenever you want"):
+// once a person has PAID for a space, the reservation becomes permanent:
+//   { userId, paid: true, paymentId, paidAt, expiresAt: null }
+// It has no deadline. Nobody else can pay for or post to that space until
+// the person posts their Snap (which removes it) or the payment is refunded.
+//
 // It lives in its own collection (not on the space) because the wall
 // endpoint sends every space field to the browser.
 // ------------------------------------------------------------
@@ -33,7 +39,12 @@ function toMs(value) {
 function isReservedByOther(reservation, userId) {
   if (!reservation) return false;
 
-  return reservation.userId !== userId && toMs(reservation.expiresAt) > Date.now();
+  if (reservation.userId === userId) return false;
+
+  // NEW: a PAID reservation never runs out.
+  if (reservation.paid) return true;
+
+  return toMs(reservation.expiresAt) > Date.now();
 }
 
 // Holds the space for `userId` for RESERVATION_MS.
@@ -65,8 +76,15 @@ async function reserveSpace(spaceId, userId) {
       throw new SpaceError(
         "SPACE_RESERVED",
         409,
-        "Someone else is paying for this space right now. Try again in a few minutes, or pick another space."
+        reservation.data().paid
+          ? "This space has been reserved by someone else. Please pick another space."
+          : "Someone else is paying for this space right now. Try again in a few minutes, or pick another space."
       );
+    }
+
+    // NEW: never downgrade a PAID reservation back to a 10-minute hold.
+    if (reservation.exists && reservation.data().paid && reservation.data().userId === userId) {
+      return;
     }
 
     transaction.set(reservationRef, {
@@ -85,10 +103,66 @@ async function releaseSpace(spaceId, userId) {
   await db.runTransaction(async (transaction) => {
     const reservation = await transaction.get(reservationRef);
 
-    if (reservation.exists && reservation.data().userId === userId) {
+    // NEW: a PAID reservation is not released by closing a window.
+    if (
+      reservation.exists &&
+      reservation.data().userId === userId &&
+      !reservation.data().paid
+    ) {
       transaction.delete(reservationRef);
     }
   });
+}
+
+// NEW: the person paid — make the reservation permanent (no deadline).
+// If someone else somehow already holds a paid reservation, leave it.
+async function markReservationPaid(spaceId, userId, paymentId) {
+  const reservationRef = reservationsCollection.doc(spaceId);
+
+  await db.runTransaction(async (transaction) => {
+    const reservation = await transaction.get(reservationRef);
+
+    if (
+      reservation.exists &&
+      reservation.data().paid &&
+      reservation.data().userId !== userId
+    ) {
+      return;
+    }
+
+    transaction.set(reservationRef, {
+      userId,
+      paid: true,
+      paymentId,
+      paidAt: new Date(),
+      expiresAt: null,
+      createdAt: reservation.exists ? reservation.data().createdAt || new Date() : new Date(),
+    });
+  });
+}
+
+// NEW: the payment was refunded — give the space back to everyone.
+async function releasePaidReservation(spaceId, paymentId) {
+  const reservationRef = reservationsCollection.doc(spaceId);
+
+  await db.runTransaction(async (transaction) => {
+    const reservation = await transaction.get(reservationRef);
+
+    if (
+      reservation.exists &&
+      reservation.data().paid &&
+      reservation.data().paymentId === paymentId
+    ) {
+      transaction.delete(reservationRef);
+    }
+  });
+}
+
+// NEW: ids of every space that is held by a PAID reservation (for the wall).
+async function listPaidReservedSpaceIds() {
+  const snapshot = await reservationsCollection.where("paid", "==", true).get();
+
+  return new Set(snapshot.docs.map((doc) => doc.id));
 }
 
 module.exports = {
@@ -97,4 +171,7 @@ module.exports = {
   isReservedByOther,
   reserveSpace,
   releaseSpace,
+  markReservationPaid,
+  releasePaidReservation,
+  listPaidReservedSpaceIds,
 };

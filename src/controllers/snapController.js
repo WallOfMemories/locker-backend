@@ -19,6 +19,7 @@ const {
   isFirebaseDownloadUrl,
 } = require("../utils/validate");
 const { sanitizeLocation } = require("../utils/location"); // NEW: countries only
+const { getSnapPreview } = require("../services/snapPreviewService"); // NEW: link previews
 
 // Time-lock limits (the browser enforces these too, but the server is the
 // one that actually decides).
@@ -1033,7 +1034,29 @@ async function getLikedSnaps(req, res) {
   }
 }
 
+// NEW: GET /api/snaps/:snapId/preview — PUBLIC. What a shared link may show
+// (photo, caption, public name). Follows the wall's privacy rules.
+async function getSnapPreviewHandler(req, res) {
+  try {
+    const preview = await getSnapPreview(req.params.snapId);
+
+    if (!preview) {
+      return res.status(404).json({ success: false, message: "Snap not found" });
+    }
+
+    // Link-preview robots may ask many times: let the edge cache it briefly.
+    res.set("Cache-Control", "public, max-age=60, s-maxage=300");
+
+    res.json({ success: true, preview });
+  } catch (error) {
+    console.error("Failed to load the Snap preview:", error);
+
+    res.status(500).json({ success: false, message: "Failed to load the Snap preview" });
+  }
+}
+
 module.exports = {
+  getSnapPreviewHandler,
   createSnap,
   updateSnap,
   getMySnaps,

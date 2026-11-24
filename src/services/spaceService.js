@@ -1,3 +1,4 @@
+const { listPaidReservedSpaceIds } = require("./reservationService");
 const { db } = require("../config/firebase");
 const { isSnapLocked, toISO } = require("./capsuleService");
 // NEW: Settings > Privacy
@@ -7,7 +8,7 @@ const spacesCollection = db.collection("spaces");
 
 // Returns every space. Occupied spaces also carry the public snap
 // fields the wall needs: image, caption, username, displayName.
-async function getAllSpaces() {
+async function loadSpaces() {
   const snapshot = await spacesCollection
     .orderBy("createdAt", "asc")
     .get();
@@ -167,6 +168,21 @@ async function createInitialSpaces() {
     created,
     total: existingCount + created,
   };
+}
+
+// NEW: spaces held by a PAID reservation are marked `reserved: true`, so the
+// wall can show them as taken-but-not-posted-yet. (Only a yes/no — never who.)
+async function getAllSpaces() {
+  const [spaces, reservedIds] = await Promise.all([
+    loadSpaces(),
+    listPaidReservedSpaceIds(),
+  ]);
+
+  return spaces.map((space) =>
+    space.status !== "occupied" && reservedIds.has(space.id)
+      ? { ...space, reserved: true }
+      : space
+  );
 }
 
 module.exports = {

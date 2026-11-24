@@ -2,7 +2,8 @@ const express = require("express");
 
 const {
   createSnap, updateSnap, getMySnaps, likeSnap, unlikeSnap, getSnapLikeInfo, saveSnap, unsaveSnap, getSnapSaveInfo, getSavedSnaps,
-  getLikedSnaps
+  getLikedSnaps,
+  getSnapPreviewHandler
 } = require("../controllers/snapController");
 
 const {
@@ -41,6 +42,14 @@ router.get(
   optionalAuth,
   validateParams("snapId"),
   getSnapSaveInfo
+);
+
+// NEW: PUBLIC — what a shared link shows in WhatsApp / social previews.
+router.get(
+  "/:snapId/preview",
+  publicReadLimiter,
+  validateParams("snapId"),
+  getSnapPreviewHandler
 );
 
 // Every other route here needs a signed-in person, and every :snapId is checked

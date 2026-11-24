@@ -4,6 +4,11 @@ const { toISO } = require("./capsuleService");
 // NEW: tell the person when their payment is refunded
 const { notifyRefund } = require("./notificationService");
 const { runInBackground } = require("../utils/background");
+// NEW: a paid space stays reserved for that person until they post
+const {
+  markReservationPaid,
+  releasePaidReservation,
+} = require("./reservationService");
 
 // ------------------------------------------------------------
 // Payments
@@ -40,6 +45,16 @@ async function recordPayment(payment) {
       snapId: null,
       createdAt: new Date(),
     });
+
+    // NEW: "pay first, post any time" — hold the space for this person with
+    // no deadline. A failure here must never undo a recorded payment.
+    if (payment.kind === "space" && payment.spaceId) {
+      try {
+        await markReservationPaid(payment.spaceId, payment.userId, payment.paymentId);
+      } catch (error) {
+        console.error("Could not mark the space reserved:", payment.spaceId, error);
+      }
+    }
 
     return { created: true };
   } catch (error) {
@@ -94,7 +109,7 @@ async function refundPayment(paymentId, reason) {
 
     // CHANGED: was `true`. Returns who paid (an object is still truthy, so
     // the `if (!claimed)` check below keeps working) for the notification.
-    return { userId: data.userId };
+    return { userId: data.userId, spaceId: data.spaceId, kind: data.kind };
   });
 
   if (!claimed) return { refunded: false };
@@ -112,6 +127,14 @@ async function refundPayment(paymentId, reason) {
       refundedAt: new Date(),
       refundReason: reason,
     });
+
+    // NEW: the money is back, so the space is free for everyone again.
+    if (claimed.kind === "space" && claimed.spaceId) {
+      runInBackground(
+        releasePaidReservation(claimed.spaceId, paymentId),
+        "Release paid reservation"
+      );
+    }
 
     // NEW: not awaited and never throws, so it can't trip the catch below
     // and wrongly flip a refunded payment back to "paid".

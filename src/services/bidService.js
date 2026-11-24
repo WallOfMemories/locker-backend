@@ -9,6 +9,7 @@ const {
 } = require("./notificationService");
 const { sendBidEmailToAdmin, sendBidderEmail } = require("./mailService");
 const { runInBackground } = require("../utils/background");
+const { isReservedByOther } = require("./reservationService");
 
 // ------------------------------------------------------------
 // NEW: bidding on the first boxes of the wall.
@@ -460,11 +461,7 @@ async function placeBid(spaceId, userId, amount) {
       throw new BidError("BIDDING_CLOSED", 409, "This box has already been given to a bidder");
     }
 
-    if (
-      reservation.exists &&
-      reservation.data().userId !== userId &&
-      toMs(reservation.data().expiresAt) > Date.now()
-    ) {
+    if (reservation.exists && isReservedByOther(reservation.data(), userId)) {
       throw new BidError(
         "SPACE_RESERVED",
         409,
